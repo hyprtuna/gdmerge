@@ -53,7 +53,8 @@ $ cargo +nightly fuzz run document fuzz/corpus/document fuzz/seeds/document \
 
 `fuzz/seeds/` is committed and small. `fuzz/corpus/` is what the fuzzer grows and is not
 tracked; the real scene fixtures are passed as an extra read-only corpus instead of being
-copied. A weekly workflow runs each target for ten minutes and uploads anything it finds.
+copied. A workflow scheduled weekly runs each target for ten minutes and uploads anything it
+finds.
 
 If a run stops on a crash, minimise it with `cargo +nightly fuzz tmin <target> <artifact>`,
 turn it into a test in `crates/tscn/tests/grammar.rs`, then fix it.
@@ -92,7 +93,7 @@ Each directory under `crates/tscn/tests/merge_cases/` holds `base`, `ours` and `
 `conflicts.txt` with one entity description per line.
 
 ```console
-$ mkdir crates/tscn/tests/merge_cases/21_my_case
+$ mkdir crates/tscn/tests/merge_cases/36_my_case
 $ # write base.tscn, ours.tscn and theirs.tscn
 $ GDMERGE_BLESS=1 cargo test -p tscn --test merge_golden
 $ git diff crates/tscn/tests/merge_cases/
@@ -124,7 +125,8 @@ is in question, those files are the authority; please do not guess, and cite wha
 Only the repository owner cuts releases, but it is worth knowing what happens.
 
 1. Bump the workspace version in the root `Cargo.toml`, run a build so `Cargo.lock` follows,
-   and move the `Unreleased` entries in `CHANGELOG.md` under the new version.
+   move the `Unreleased` entries in `CHANGELOG.md` under the new version, and update the version
+   placeholder in `.github/ISSUE_TEMPLATE/bug_report.yml`.
 2. Merge that through a pull request like anything else.
 3. Push a `v<version>` tag. Nothing publishes on merge; the tag is what starts a release.
 4. The workflow builds the binaries and creates the GitHub release, then waits. Publishing to
@@ -149,5 +151,16 @@ $ python3 .github/scripts/publish-plan.py tscn gdmerge
   `ci:`, `chore:`, `refactor:`, `perf:`.
 - One logical change per commit. Rebase away fixup commits before opening the pull request.
 - Update `CHANGELOG.md` under `## [Unreleased]` for anything user-visible.
-- `main` is protected: everything lands through a pull request, CI must be green, and the repository
-  owner merges.
+- `main` is protected by the `protect-main` ruleset. For everyone but a repository administrator
+  it guarantees: no direct pushes, no force pushes, no deletion; one approving review from a code
+  owner, on the latest push, with every review thread resolved; and the `gate` check green on that
+  push. The repository owner is an administrator, is allowed to bypass all of that, and does: their
+  own pull requests are merged with the bypass rather than a second reviewer. That is the one gap
+  and it is the owner's.
+- `.github/rulesets/protect-main.json` is the source of truth for that ruleset, exported from the
+  live one. Change the file, then apply it; do not edit the ruleset in the web UI and let the two
+  drift:
+
+  ```console
+  $ gh api -X PUT repos/hyprtuna/gdmerge/rulesets/21772475 --input .github/rulesets/protect-main.json
+  ```

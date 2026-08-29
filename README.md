@@ -340,7 +340,7 @@ Its grammar follows Godot's own `VariantParser` and `ResourceLoaderText`. During
 run over 814 `.tscn` and `.tres` files from public Godot 4 projects; all 814 parsed and re-serialised
 byte for byte. Thirty of those files ship as fixtures, and the byte-exact round trip over them is a
 hard gate in CI. Three fuzz targets cover the tokenizer, the value parser and whole-document
-parsing, and run weekly; the round trip is one of the properties they assert.
+parsing, and are scheduled weekly; the round trip is one of the properties they assert.
 
 ## Contributing
 

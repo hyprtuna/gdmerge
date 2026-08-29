@@ -45,7 +45,7 @@ body:
     id: version
     attributes:
       label: gdmerge --version output
-      placeholder: gdmerge 0.1.0
+      placeholder: gdmerge 0.3.6
     validations:
       required: true
 
