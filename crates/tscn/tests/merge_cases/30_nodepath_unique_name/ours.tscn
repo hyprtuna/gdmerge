@@ -6,4 +6,4 @@
 unique_name_in_owner = true
 
 [node name="Readout" type="Label" parent="."]
-source = NodePath("%Spin")
+source = NodePath("%Spinner")

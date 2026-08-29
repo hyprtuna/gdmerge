@@ -8,3 +8,6 @@ unique_name_in_owner = true
 [node name="Readout" type="Label" parent="."]
 text = "value"
 source = NodePath("%Spin")
+
+[node name="Reset" type="Button" parent="."]
+target = NodePath("%Spin")

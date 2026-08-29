@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The golden merge corpus runs through the binary as well as the library. `gdmerge merge` gates
+  its inputs on `check` and hands a failing one to a text merge, and case `30_nodepath_unique_name`
+  had an `ours.tscn` whose `%Spin` pointed at a node that side had renamed, so the library test
+  recorded a merge no one could reach from the command line. Every case now has to give the same
+  output, conflicts and exit status from the outside, every input has to pass `check`, and case 30
+  is rebuilt with valid inputs: the side that renamed the node updated its own reference, as the
+  editor does, and the other side added a node pointing at `%Spin`, which the merge rewrites to
+  `%Spinner`.
+
 ### Fixed
 
 - Reports are bounded through their names as well as their values. 0.3.5 bounded every rendered

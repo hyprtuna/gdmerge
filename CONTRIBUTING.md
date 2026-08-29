@@ -105,7 +105,9 @@ confirm it is stable.
 Every case is also held to three invariants automatically, which is most of the value of adding one:
 the merged output must parse and pass `gdmerge check`; swapping `ours` and `theirs` must not change
 whether the merge is clean; and merging against an unchanged branch must return the other side byte
-for byte.
+for byte. The same cases then run through the binary (`crates/gdmerge/tests/golden_cli.rs`), which
+sends any input that fails `check` to a text merge instead, so all three inputs have to be valid
+scenes: a case the tool would refuse records an answer nobody can reach.
 
 ## Changing merge behaviour
 
