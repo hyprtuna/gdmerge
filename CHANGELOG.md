@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A merge of a file that uses CRLF line endings no longer emits LF for the blank
+  lines it inserts between sections, which produced a file with mixed line
+  endings on a Windows checkout with `core.autocrlf=true`.
+
 ## [0.1.0] - 2026-08-29
 
 First release.
