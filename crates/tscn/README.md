@@ -23,8 +23,8 @@ for section in doc.sections_of(tscn::SectionKind::Node) {
 ```
 
 On top of the syntax tree sits a semantic layer that identifies entities independently of Godot's
-randomised per-file ids — external resources by `uid` then `path`, sub-resources by content, nodes
-by scene-tree path — which is what makes [`diff`], [`merge`] and [`check`] work across branches.
+randomised per-file ids (external resources by `uid` then `path`, sub-resources by content, nodes
+by scene-tree path), which is what makes [`diff`], [`merge`] and [`check`] work across branches.
 
 [`diff`]: https://docs.rs/tscn/latest/tscn/fn.diff.html
 [`merge`]: https://docs.rs/tscn/latest/tscn/fn.merge.html

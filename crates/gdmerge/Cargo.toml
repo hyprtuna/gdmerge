@@ -1,6 +1,6 @@
 [package]
 name = "gdmerge"
-description = "Semantic diff and 3-way merge for Godot 4 scenes and resources (.tscn/.tres) — a git merge driver that ends scene merge conflicts"
+description = "Semantic diff and 3-way merge for Godot 4 scenes and resources (.tscn/.tres): a git merge driver that ends scene merge conflicts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

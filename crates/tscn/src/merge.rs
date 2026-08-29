@@ -1,6 +1,6 @@
 //! Three-way merge over semantic entities.
 //!
-//! Both sides are reduced to changes against the base *per entity* — a node, an
+//! Both sides are reduced to changes against the base *per entity*: a node, an
 //! external resource, a sub-resource, a connection. Disjoint changes are applied
 //! together; only a genuine collision (the same property changed two ways, a
 //! delete against a modify) becomes a conflict, and the conflict markers wrap

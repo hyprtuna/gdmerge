@@ -1,6 +1,6 @@
 //! The hard gate: every real Godot file in `tests/fixtures/` must survive a
 //! parse/serialize round trip byte for byte, and must pass the structural
-//! checks. These files come from godotengine/godot-demo-projects — see
+//! checks. These files come from godotengine/godot-demo-projects; see
 //! `fixtures/ATTRIBUTION.md`.
 
 use std::path::{Path, PathBuf};

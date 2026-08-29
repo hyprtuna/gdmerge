@@ -1,4 +1,4 @@
-//! `gdmerge` — semantic diff and 3-way merge for Godot 4 `.tscn` / `.tres` files.
+//! `gdmerge`: semantic diff and 3-way merge for Godot 4 `.tscn` / `.tres` files.
 
 mod check;
 mod diff;
