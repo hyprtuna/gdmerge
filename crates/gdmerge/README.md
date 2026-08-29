@@ -31,8 +31,9 @@ for `*.tscn` and `*.tres`. Commit the `.gitattributes` it writes; each teammate 
 | `gdmerge git-install [--global]` | Register the merge driver and the `.gitattributes` entries. |
 
 Disjoint changes merge automatically: nodes added on both branches, different properties of one
-node, resources that collided on an id, a reorder against an edit. Genuine collisions (the same
-property set two ways, a delete against a modify) conflict, with markers around just that node.
+node, resources that collided on an id, a reorder against an edit, a rename on one branch against
+an edit on the other. Genuine collisions (the same property set two ways, a delete against a
+modify, one node renamed two different ways) conflict, with markers around just that node.
 
 A file gdmerge cannot parse is handed to `git merge-file`, so it is never worse than not having it
 installed. Output is written atomically, and a clean merge is re-parsed before it is accepted.
