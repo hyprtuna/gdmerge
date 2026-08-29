@@ -412,15 +412,53 @@ fn the_driver_reports_the_renumbered_id_on_a_shared_sub_resource_conflict() {
         let ours = ours.rsplit("ours ").next().unwrap_or_default();
         assert_ne!(ours, theirs, "the two sides shown must differ: {line}");
     }
-    // And what is shown is what the markers hold, cut to the width the line
-    // allows a value.
+    // And what is shown is what the markers hold, the id whole.
     let text = stdout(&out);
     assert!(text.contains("id=\"RectangleShape2D_gdm0\""), "{text}");
     assert!(
-        lines[0].contains("ours SubResource(\"1_s\") / theirs SubResource(\"RectangleShape2D_g"),
+        lines[0]
+            .contains("ours SubResource(\"1_s\") / theirs SubResource(\"RectangleShape2D_gdm0\")"),
         "{}",
         lines[0]
     );
+}
+
+/// The table shortens long values, and an id is not a long value: it has to
+/// be readable and copyable whole however wide that makes the column.
+#[test]
+fn the_mergetool_table_shows_a_renumbered_id_whole() {
+    let s = Scratch::new("mergetool-whole-id");
+    let base = "[gd_scene load_steps=2 format=3 uid=\"uid://shared\"]\n\n\
+                [sub_resource type=\"RectangleShape2D\" id=\"1_s\"]\n\
+                size = Vector2(8, 8)\n\n\
+                [node name=\"Root\" type=\"Node2D\"]\n\n\
+                [node name=\"A\" type=\"CollisionShape2D\" parent=\".\"]\n\
+                shape = SubResource(\"1_s\")\n\
+                data = PackedFloat32Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)\n\n\
+                [node name=\"B\" type=\"CollisionShape2D\" parent=\".\"]\n\
+                shape = SubResource(\"1_s\")\n";
+    let b = s.write("base.tscn", base);
+    let o = s.write("ours.tscn", &base.replace("Vector2(8, 8)", "Vector2(10, 10)"));
+    let t = s.write("theirs.tscn", &base.replace("Vector2(8, 8)", "Vector2(24, 24)"));
+    let m = s.write("merged.tscn", "");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    let shape = text
+        .lines()
+        .find(|l| l.trim_start().starts_with('>') && l.contains("shape"))
+        .unwrap_or_else(|| panic!("no marked shape row in:\n{text}"));
+    assert!(shape.contains("SubResource(\"RectangleShape2D_gdm0\")"), "{shape}");
+    // A value that really is long is still cut.
+    let data = text.lines().find(|l| l.contains("PackedFloat32Array")).expect("a data row");
+    assert!(data.contains("..."), "{data}");
 }
 
 // ---------------------------------------------------------------------------
