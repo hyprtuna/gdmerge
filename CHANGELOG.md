@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-29
+
 ### Changed
 
 - A file carrying a reference that was broken before the merge is handed to git's text merge, and
@@ -229,7 +231,8 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.3
 [0.3.2]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.2
 [0.3.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.1
 [0.3.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.0
