@@ -143,6 +143,45 @@ fn diff_reports_semantic_changes() {
     assert!(text.contains("+ ext_resource uid://tex_player"), "{text}");
 }
 
+/// `diff` shows values under the same rule as the conflict reports: bounded,
+/// an id whole, a long string summarised with its type.
+#[test]
+fn diff_shows_ids_whole_and_long_values_bounded() {
+    let s = Scratch::new("diff-bounded");
+    let id = "AnimationNodeStateMachineTransition_gdm10";
+    let refs: Vec<String> = (0..40).map(|n| format!("ExtResource(\"{n}_res\")")).collect();
+    let node = |shape: &str, map: &str| {
+        format!(
+            "[gd_scene format=3 uid=\"uid://diff\"]\n\n[node name=\"Root\" type=\"Node2D\"]\n\
+             shape = {shape}\n\
+             tile_map_data = PackedByteArray(\"{map}\")\n"
+        )
+    };
+    let a = s.write(
+        "a.tscn",
+        &node(
+            &format!("Array[Resource]([SubResource(\"{id}\"), {}])", refs.join(", ")),
+            &long_map(0),
+        ),
+    );
+    let b = s.write("b.tscn", &node("null", &long_map(1)));
+    let out = gdmerge(&["diff", a.to_str().unwrap(), b.to_str().unwrap()]);
+    assert!(out.status.success());
+    let text = stdout(&out);
+    for line in text.lines() {
+        assert!(
+            line.chars().count() <= 2 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    let shape = text.lines().find(|l| l.contains("shape:")).expect("a shape line");
+    assert!(shape.contains(&format!("SubResource(\"{id}\")")), "{shape}");
+    assert!(shape.contains("chars elided"), "{shape}");
+    let map = text.lines().find(|l| l.contains("tile_map_data:")).expect("a map line");
+    assert!(map.contains("PackedByteArray(\"...\") (16340 chars elided) -> PackedByteArray(\"...\") (16340 chars elided)"), "{map}");
+}
+
 #[test]
 fn diff_emits_json() {
     let s = Scratch::new("diff-json");
