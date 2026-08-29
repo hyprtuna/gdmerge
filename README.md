@@ -94,12 +94,16 @@ would collide gets a new one.
 | Each branch edits a *different* property of the same node | both edits applied |
 | Each branch edits a different node | both edits applied |
 | One branch reorders nodes, the other edits one of them | our order kept, their edit applied |
+| One branch renames or reparents a node, the other edits it | both applied: the node keeps the new path and gains the edit |
+| A renamed node's children, connections and `[editable]` entries | follow the rename automatically |
+| A node added under a subtree the other branch renamed | reparented onto the new path |
 | One branch deletes a node the other did not touch | deleted |
 | Both branches add the same node with the same contents | one copy |
 | Both branches reference one resource under different ids | matched by `uid`, then by `path`; one entry |
 | Sub-resources with identical contents but different ids | matched by content; one entry |
 | `load_steps` disagreeing between branches | recomputed from the merged file |
 | Both branches set the *same* property to different values | **conflict**, markers around that node only |
+| Both branches rename one node to different names | **conflict**, markers around that node only |
 | One branch deletes a node the other edited | **conflict**, markers around that node only |
 | Both branches change one sub-resource differently | both kept; **conflict** at the node that references it |
 | A file gdmerge cannot parse | hands the whole merge to `git merge-file` and returns its exit status |
@@ -147,9 +151,13 @@ ok   level.tscn
 
 ## Limitations
 
-- **Renames are not tracked across a merge.** A node's identity is its scene-tree path. If one
-  branch renames or reparents a node and the other edits it, you get a delete-versus-modify
-  conflict. (`gdmerge diff` *does* report renames and reparents, so you can see what happened.)
+- **A rename combined with an edit, in the same branch, is not tracked.** Nodes are matched across
+  a rename by their contents, so a branch that renames a node *and* changes it in one step no
+  longer matches, and you get a delete against a modify. A rename on one branch and an edit on the
+  other merges cleanly, which is the common case.
+- **Node paths inside property values are not rewritten.** A rename updates `parent`, connection
+  endpoints and `[editable]` paths, but a `NodePath("Old/Thing")` sitting in some property keeps
+  its old text.
 - **Reordering is not merged element-wise.** If both branches reorder the same siblings, our order
   wins rather than the two being interleaved.
 - **`load_steps` is only recomputed when it is already present.** Godot omits it in many saved

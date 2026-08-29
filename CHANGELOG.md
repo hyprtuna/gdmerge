@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Renames and reparents are now tracked through a merge. A node renamed or moved on one branch and
+  edited on the other merges cleanly instead of conflicting, and the rename carries the node's
+  children, its connection endpoints and its `[editable]` entries with it. A node added under a
+  subtree the other branch renamed is reparented onto the new path. Renaming one node to two
+  different names on the two branches is reported as a conflict, with the reason named.
+- `Conflict` now carries the header field or property that could not be reconciled, in a new `key`
+  field, and its `detail` names it.
+
 ### Fixed
 
 - A merge of a file that uses CRLF line endings no longer emits LF for the blank
