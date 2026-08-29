@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 use tscn::{Document, MergeOptions};
 
-use crate::{fallback, io, MergeArgs, EXIT_CONFLICT};
+use crate::{fallback, io, report, MergeArgs, EXIT_CONFLICT};
 
 /// Where the merged text has to end up.
 enum Destination {
@@ -72,8 +72,9 @@ pub fn run(args: MergeArgs) -> Result<i32> {
     }
 
     emit(&dest, &outcome.text)?;
-    for c in &outcome.conflicts {
-        eprintln!("gdmerge: conflict in {} ({})", c.entity, c.detail);
+    if !outcome.is_clean() {
+        eprint!("{}", report::plain(&outcome.conflicts));
+        eprintln!("gdmerge: run `git mergetool --tool=gdmerge` to see the two sides side by side");
     }
     Ok(if outcome.is_clean() { 0 } else { EXIT_CONFLICT })
 }

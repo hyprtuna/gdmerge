@@ -12,6 +12,8 @@ use anyhow::{bail, Context, Result};
 const DRIVER: &str = "gdmerge";
 const NAME: &str = "Godot 4 scene and resource merge";
 const COMMAND: &str = "gdmerge merge %O %A %B %L %P";
+// git runs a mergetool command through the shell with these variables set.
+const MERGETOOL_COMMAND: &str = "gdmerge mergetool \"$BASE\" \"$LOCAL\" \"$REMOTE\" \"$MERGED\"";
 const MARKER: &str = "# gdmerge";
 const PATTERNS: [&str; 2] = ["*.tscn", "*.tres"];
 
@@ -23,15 +25,22 @@ pub fn install(global: bool) -> Result<i32> {
     // one side rather than attempting a text merge of two scene files.
     set(&scope, &format!("merge.{DRIVER}.recursive"), "binary")?;
 
+    // The mergetool is separate from the driver: the driver resolves what it
+    // can during `git merge`, the mergetool explains what it could not.
+    set(&scope, &format!("mergetool.{DRIVER}.cmd"), MERGETOOL_COMMAND)?;
+    set(&scope, &format!("mergetool.{DRIVER}.trustExitCode"), "true")?;
+
     let attributes = scope.attributes_path()?;
     let added = add_attributes(&attributes)?;
 
-    println!("configured the '{DRIVER}' merge driver in {}", scope.describe());
+    println!("configured the '{DRIVER}' merge driver and mergetool in {}", scope.describe());
     if added {
         println!("added *.tscn and *.tres rules to {}", attributes.display());
     } else {
         println!("{} already had gdmerge rules", attributes.display());
     }
+    println!("\nwhen a merge does conflict, `git mergetool --tool={DRIVER}` shows the two sides");
+    println!("side by side. To make it the default: git config merge.tool {DRIVER}");
     if !global {
         println!("\ncommit .gitattributes so the whole team gets the same behaviour;");
         println!("each teammate still runs `gdmerge git-install` once to define the driver.");
@@ -42,9 +51,10 @@ pub fn install(global: bool) -> Result<i32> {
 pub fn uninstall(global: bool) -> Result<i32> {
     let scope = Scope::detect(global)?;
     let _ = git(&["config", scope.flag(), "--remove-section", &format!("merge.{DRIVER}")]);
+    let _ = git(&["config", scope.flag(), "--remove-section", &format!("mergetool.{DRIVER}")]);
     let attributes = scope.attributes_path()?;
     let removed = remove_attributes(&attributes)?;
-    println!("removed the '{DRIVER}' merge driver from {}", scope.describe());
+    println!("removed the '{DRIVER}' merge driver and mergetool from {}", scope.describe());
     if removed {
         println!("removed gdmerge rules from {}", attributes.display());
     }
