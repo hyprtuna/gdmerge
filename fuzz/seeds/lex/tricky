@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+; a comment
+[node name="R" type="RichTextLabel"]
+text = "[b]bold[/b] and a \"quote\""
+groups = ["a", "b"]

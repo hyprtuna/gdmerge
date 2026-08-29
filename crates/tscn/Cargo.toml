@@ -16,6 +16,11 @@ categories = ["parser-implementations", "game-development"]
 name = "tscn"
 path = "src/lib.rs"
 
+[features]
+# Exposes the lexer and value parser to the fuzz targets in ../../fuzz.
+# Not part of the public API and not covered by semver.
+fuzzing = []
+
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }

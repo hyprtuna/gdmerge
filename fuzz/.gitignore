@@ -1,0 +1,6 @@
+# Grown by the fuzzer at run time, and crash artifacts. Only the seeds in
+# seeds/ are tracked.
+corpus/
+artifacts/
+target/
+Cargo.lock
