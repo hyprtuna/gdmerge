@@ -43,6 +43,22 @@ impl Default for MergeOptions {
     }
 }
 
+/// One header field or property of a conflicting entity, as each side has it.
+///
+/// Values are the original source text, so they read the way they do in the
+/// file. `None` means the side does not have that item at all, which is how a
+/// delete against a modify shows up.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictRow {
+    pub key: String,
+    pub base: Option<String>,
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+    /// True when the two branches disagree here, which is what has to be
+    /// resolved. Rows where they agree are kept for context.
+    pub differs: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
     /// Human-readable identity of the entity, e.g. `node Player/Sprite2D`.
@@ -51,6 +67,8 @@ pub struct Conflict {
     /// The header field or property that could not be reconciled, when the
     /// conflict came down to one of them.
     pub key: Option<String>,
+    /// Every item of the entity, side by side, for presenting the conflict.
+    pub rows: Vec<ConflictRow>,
 }
 
 #[derive(Debug, Clone)]
@@ -195,6 +213,7 @@ pub fn merge(
                             entity: vo.describe(id),
                             detail: clash_detail(&align, &vb, id, &key),
                             key: Some(key),
+                            rows: conflict_rows(&vb, &vo, &vt, id),
                         });
                         Res::Conflict
                     }
@@ -210,6 +229,7 @@ pub fn merge(
                     entity: vo.describe(id),
                     detail: "deleted by theirs, modified by ours".to_string(),
                     key: None,
+                    rows: conflict_rows(&vb, &vo, &vt, id),
                 });
                 Res::Conflict
             }
@@ -221,6 +241,7 @@ pub fn merge(
                     entity: vt.describe(id),
                     detail: "deleted by ours, modified by theirs".to_string(),
                     key: None,
+                    rows: conflict_rows(&vb, &vo, &vt, id),
                 });
                 Res::Conflict
             }
@@ -246,6 +267,54 @@ fn clash_detail(align: &Alignment, vb: &View<'_>, id: &EntityId, key: &str) -> S
         }
     }
     format!("{key} changed differently on both sides")
+}
+
+/// Lays a conflicting entity out item by item, as each of the three sides has
+/// it, so the disagreement can be shown rather than only marked.
+fn conflict_rows(vb: &View<'_>, vo: &View<'_>, vt: &View<'_>, id: &EntityId) -> Vec<ConflictRow> {
+    let (b, o, t) = (vb.section(id), vo.section(id), vt.section(id));
+    let mut rows = Vec::new();
+
+    let mut names: Vec<String> = Vec::new();
+    for s in [o, t, b].into_iter().flatten() {
+        for f in &s.fields {
+            if !s.kind.is_derived_field(&f.name) && !names.contains(&f.name) {
+                names.push(f.name.clone());
+            }
+        }
+    }
+    for name in names {
+        let ours = o.and_then(|s| canonical_field(vo, s, &name));
+        let theirs = t.and_then(|s| canonical_field(vt, s, &name));
+        rows.push(ConflictRow {
+            differs: ours != theirs,
+            base: b.and_then(|s| s.field(&name)).map(|f| f.value_raw.clone()),
+            ours: o.and_then(|s| s.field(&name)).map(|f| f.value_raw.clone()),
+            theirs: t.and_then(|s| s.field(&name)).map(|f| f.value_raw.clone()),
+            key: name,
+        });
+    }
+
+    let mut keys: Vec<String> = Vec::new();
+    for s in [o, t, b].into_iter().flatten() {
+        for p in &s.props {
+            if !keys.contains(&p.key) {
+                keys.push(p.key.clone());
+            }
+        }
+    }
+    for key in keys {
+        let ours = o.and_then(|s| vo.scene.canonical_prop(s, &key));
+        let theirs = t.and_then(|s| vt.scene.canonical_prop(s, &key));
+        rows.push(ConflictRow {
+            differs: ours != theirs,
+            base: b.and_then(|s| s.prop(&key)).map(|p| p.value_raw.clone()),
+            ours: o.and_then(|s| s.prop(&key)).map(|p| p.value_raw.clone()),
+            theirs: t.and_then(|s| s.prop(&key)).map(|p| p.value_raw.clone()),
+            key,
+        });
+    }
+    rows
 }
 
 /// Item-level three-way merge of one section. The error names the first header
