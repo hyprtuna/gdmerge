@@ -95,8 +95,12 @@ Check the driver definition:
 
 ```console
 $ git config --get merge.gdmerge.driver
-gdmerge merge %O %A %B %L %P
+if command -v gdmerge >/dev/null 2>&1; then gdmerge merge %O %A %B %L %P; else git merge-file -L ours -L base -L theirs %A %O %B; fi
 ```
+
+git runs a merge driver through the shell, so the driver checks for the binary first and runs
+git's own text merge if it is not there. That is what makes a missing `gdmerge` no worse than
+never having installed it: see below.
 
 Check that git will apply it to a scene file:
 
@@ -154,10 +158,17 @@ git takes that side without consulting any driver.
 **`gdmerge: falling back to a text merge`.** One of the three inputs did not parse. The message names
 which one and gives a line and column. Please open an issue with the three files attached.
 
-**`gdmerge: command not found` during a merge.** git runs the driver through your shell, so the
-binary has to be on the `PATH` git sees. Either move it somewhere already on `PATH`, or point the
-driver at an absolute path:
+**gdmerge is not on `PATH` during a merge.** git runs the driver through your shell, so the binary
+has to be on the `PATH` git sees, which is not always the one your interactive shell has. When it
+is missing the driver falls back to `git merge-file` and you get git's ordinary text merge, with
+conflict markers holding both sides: the same result as if `.gitattributes` had never named the
+driver, and nothing is lost. To get the semantic merge back, either move the binary somewhere
+already on `PATH`, or point the driver at an absolute path:
 
 ```console
 $ git config merge.gdmerge.driver "/full/path/to/gdmerge merge %O %A %B %L %P"
 ```
+
+Note that an absolute path spelled out this way gives up the fallback: if that path stops being
+valid, git is back to leaving the file conflicted with only your side in it. Re-running
+`gdmerge git-install` restores the guarded form.

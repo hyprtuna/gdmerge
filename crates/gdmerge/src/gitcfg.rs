@@ -11,7 +11,19 @@ use anyhow::{bail, Context, Result};
 
 const DRIVER: &str = "gdmerge";
 const NAME: &str = "Godot 4 scene and resource merge";
-const COMMAND: &str = "gdmerge merge %O %A %B %L %P";
+/// The driver git runs, as a shell fragment: git invokes a merge driver through
+/// the shell, so the command can decide for itself what to do.
+///
+/// It has to, because a driver git cannot execute is worse than no driver at
+/// all. git leaves `%A` holding our side untouched and reports the file
+/// conflicted, with no markers in it and the other side nowhere; `git add` then
+/// throws that side away silently. Checking for the binary first and otherwise
+/// running git's own text merge, whose exit status passes straight through,
+/// makes the worst case the merge you would have had without gdmerge
+/// installed.
+const COMMAND: &str = "if command -v gdmerge >/dev/null 2>&1; then \
+                       gdmerge merge %O %A %B %L %P; else \
+                       git merge-file -L ours -L base -L theirs %A %O %B; fi";
 // git runs a mergetool command through the shell with these variables set.
 const MERGETOOL_COMMAND: &str = "gdmerge mergetool \"$BASE\" \"$LOCAL\" \"$REMOTE\" \"$MERGED\"";
 const MARKER: &str = "# gdmerge";
