@@ -129,20 +129,23 @@ Only the repository owner cuts releases, but it is worth knowing what happens.
    placeholder in `.github/ISSUE_TEMPLATE/bug_report.yml`.
 2. Merge that through a pull request like anything else.
 3. Push a `v<version>` tag. Nothing publishes on merge; the tag is what starts a release.
-4. The workflow builds the binaries and creates the GitHub release, then waits. Publishing to
-   crates.io needs an approval on the `release` environment, and uses trusted publishing, so
-   there is no registry token anywhere.
+4. The workflow first works out what the release has to do and prints it, then builds the
+   binaries, creates the GitHub release, and waits. Publishing to crates.io needs an approval on
+   the `release` environment, asked for only once that plan is in the log, and uses trusted
+   publishing, so there is no registry token anywhere.
 
-`.github/scripts/publish-plan.py` decides what is left to publish and refuses two things
-outright: a version older than one already on crates.io, and a release where every crate is
-already at that version. Both mean an old or finished release is being replayed, so they fail
-loudly instead of uploading something wrong or passing quietly. A release that got half way,
+`.github/scripts/publish-plan.py` is that first step. It decides what is left to publish and
+refuses two things outright: a version older than one live on crates.io (SemVer precedence, so
+`0.4.0-rc.10` is newer than `0.4.0-rc.9`; yanked versions do not count), and a release where every
+crate is already at that version. Both mean an old or finished release is being replayed, so the
+whole workflow stops there, before anything is built or uploaded. A release that got half way,
 where one crate published and the next did not, still completes.
 
-You can run that check yourself from a clean tree:
+You can run that check yourself from a clean tree, and its tests:
 
 ```console
 $ python3 .github/scripts/publish-plan.py tscn gdmerge
+$ python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 ```
 
 ## Commits and pull requests

@@ -18,6 +18,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   editor does, and the other side added a node pointing at `%Spin`, which the merge rewrites to
   `%Spinner`.
 
+- The release workflow decides what it is going to do before it builds or uploads anything, and
+  both the GitHub release and the crates.io publish wait on that decision; the approval for the
+  crates.io step is asked for only once the plan is in the log. The downgrade guard now orders
+  versions by SemVer precedence (`0.4.0-rc.10` is newer than `0.4.0-rc.9`, build metadata is
+  ignored) and does not count yanked versions as live, so a corrective release below a yanked one
+  goes through. CI's gate fails when a needed job was skipped, not only when one failed.
+
 ### Fixed
 
 - Reports are bounded through their names as well as their values. 0.3.5 bounded every rendered
