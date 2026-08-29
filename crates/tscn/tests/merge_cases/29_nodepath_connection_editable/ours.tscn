@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://npconn"]
+
+[ext_resource type="PackedScene" uid="uid://door" path="res://door.tscn" id="1_door"]
+
+[node name="Room" type="Node2D"]
+
+[node name="OpenButton" type="Button" parent="."]
+text = "open"
+
+[node name="Door" parent="." instance=ExtResource("1_door")]
+
+[connection signal="pressed" from="OpenButton" to="." method="_on_pressed"]
+
+[editable path="Door"]

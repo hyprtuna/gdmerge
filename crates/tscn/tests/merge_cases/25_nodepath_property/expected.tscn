@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://npprop"]
+
+[node name="Level" type="Node2D"]
+
+<<<<<<< ours
+[node name="Player" type="CharacterBody2D" parent="."]
+speed = 100.0
+=======
+[node name="Hero" type="CharacterBody2D" parent="."]
+speed = 250.0
+>>>>>>> theirs
+
+[node name="Shadow" type="RemoteTransform2D" parent="."]
+remote_path = NodePath("../Hero")

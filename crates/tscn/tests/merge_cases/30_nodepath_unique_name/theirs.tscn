@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://npunique"]
+
+[node name="Panel" type="Control"]
+
+[node name="Spin" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+
+[node name="Readout" type="Label" parent="."]
+text = "value"
+source = NodePath("%Spin")

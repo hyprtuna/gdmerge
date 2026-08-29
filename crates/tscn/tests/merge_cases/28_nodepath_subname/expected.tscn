@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://npsub"]
+
+[node name="Level" type="Node2D"]
+
+<<<<<<< ours
+[node name="Player" type="Sprite2D" parent="."]
+offset = Vector2(0, 0)
+=======
+[node name="Hero" type="Sprite2D" parent="."]
+offset = Vector2(4, 4)
+>>>>>>> theirs
+
+[node name="Tween" type="Node" parent="."]
+watch = NodePath("../Hero:modulate")
