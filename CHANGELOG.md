@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-29
+
 ### Added
 
 - Renames and reparents are now tracked through a merge. A node renamed or moved on one branch and
@@ -24,6 +26,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   conflicted.
 - `Conflict` carries a `rows` field with every item of the entity as each of the three sides has it,
   which is what both of those renderings are built from.
+
+### Changed
+
+- The declared minimum Rust version is now accurate and checked in CI. `tscn` builds on 1.74 as
+  before; `gdmerge` declares 1.85, which is what its dependency tree actually needs. The old
+  workspace wide claim of 1.74 for both was wrong.
+- `Conflict` gained the `key` and `rows` fields. Code that constructs a `Conflict` has to be
+  updated; code that only reads one does not.
 
 ### Fixed
 
@@ -61,5 +71,6 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.1.0
