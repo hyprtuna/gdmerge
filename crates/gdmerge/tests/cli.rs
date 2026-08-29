@@ -795,3 +795,43 @@ fn mergetool_shows_the_row_for_a_stranded_node_path() {
     assert!(written.contains(">>>>>>> theirs"), "{written}");
     assert!(written.contains("[node name=\"Level\" type=\"Node2D\"]\n\n<<<<<<<"), "{written}");
 }
+
+/// The README and the pre-commit hook both promise which findings stop a commit
+/// and which do not, so the split is pinned here rather than left to drift.
+#[test]
+fn check_warns_without_failing_on_what_godot_would_still_load() {
+    let s = Scratch::new("check-severity");
+
+    // A stale load_steps: wrong, and Godot recomputes it on the next save.
+    let stale = s.write(
+        "stale.tscn",
+        "[gd_scene load_steps=9 format=3]\n\n[node name=\"Root\" type=\"Node2D\"]\n",
+    );
+    let out = gdmerge(&["check", stale.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    assert!(stdout(&out).contains("warning: load_steps is 9"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("0 failed"), "{}", stdout(&out));
+
+    // A path that cannot be judged from this file: unverifiable, not wrong.
+    let unverifiable = s.write(
+        "instanced.tscn",
+        "[gd_scene load_steps=2 format=3]\n\n\
+         [ext_resource type=\"PackedScene\" path=\"res://a.tscn\" id=\"1\"]\n\n\
+         [node name=\"Root\" type=\"Node2D\"]\n\n\
+         [node name=\"Sub\" parent=\".\" instance=ExtResource(\"1\")]\n\n\
+         [node name=\"W\" type=\"Node\" parent=\".\"]\n\
+         p = NodePath(\"../Sub/Inner\")\n",
+    );
+    let out = gdmerge(&["check", unverifiable.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    assert!(stdout(&out).contains("cannot be checked here"), "{}", stdout(&out));
+
+    // A path that names nothing is the other side of the line: it fails.
+    let broken = s.write(
+        "broken.tscn",
+        "[gd_scene format=3]\n\n[node name=\"Root\" type=\"Node2D\"]\nx = NodePath(\"Nope\")\n",
+    );
+    let out = gdmerge(&["check", broken.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    assert!(stdout(&out).contains("1 failed"), "{}", stdout(&out));
+}

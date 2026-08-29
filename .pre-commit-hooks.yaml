@@ -18,8 +18,12 @@
   name: gdmerge check
   description: >
     Parse every changed Godot 4 scene and resource file, prove it round trips
-    byte for byte, and validate its structure: dangling resource references,
-    duplicate ids, orphaned nodes, and node paths that name nothing.
+    byte for byte, and validate its structure. The commit is blocked by
+    anything Godot would refuse to load or would load wrongly: dangling
+    resource references, duplicate ids, orphaned nodes, a missing or repeated
+    root, and node paths that name nothing. A stale load_steps, and a node path
+    that cannot be judged from one file, are reported as warnings and do not
+    block the commit.
   entry: gdmerge check
   language: system
   files: \.(tscn|tres)$
