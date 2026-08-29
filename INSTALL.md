@@ -184,3 +184,8 @@ $ git config merge.gdmerge.driver "/full/path/to/gdmerge merge %O %A %B %L %P"
 Note that an absolute path spelled out this way gives up the fallback: if that path stops being
 valid, git is back to leaving the file conflicted with only your side in it. Re-running
 `gdmerge git-install` restores the guarded form.
+
+**`git mergetool` ends with `merge of level.tscn failed`.** That is git's wording for a mergetool
+that exited non-zero, and gdmerge exits `1` whenever conflicts remain, which after it has shown you
+the table is the expected outcome. Nothing was lost: the file holds the conflict markers with both
+sides, exactly as the table describes. Edit it, remove the markers, and `git add` it.

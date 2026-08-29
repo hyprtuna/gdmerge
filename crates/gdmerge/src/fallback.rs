@@ -32,8 +32,13 @@ pub struct Fallback {
     pub conflicts: usize,
 }
 
-/// Runs `git merge-file -p`, falling back to an in-process diff3 if git is not
-/// on PATH.
+/// Runs `git merge-file -p`, falling back to an in-process line merge if git
+/// is not on PATH.
+///
+/// No conflict style is asked for: `git merge-file` reads `merge.conflictstyle`
+/// itself, so the markers come out the way git's own merges do for this user.
+/// The labels are given in full so that a `diff3` or `zdiff3` setting has a
+/// name for the base section.
 pub fn merge_file(
     base: &Path,
     ours: &Path,
@@ -45,7 +50,6 @@ pub fn merge_file(
     let out = Command::new("git")
         .arg("merge-file")
         .arg("-p")
-        .arg("--diff3")
         .arg(format!("--marker-size={marker_size}"))
         .arg("-L")
         .arg(ours_label)

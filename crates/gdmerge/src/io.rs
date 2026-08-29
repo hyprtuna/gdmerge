@@ -11,8 +11,19 @@ pub fn read(path: &Path) -> Result<String> {
 /// Writes `contents` to `path` atomically: a partially written scene file is
 /// worse than no output at all, so the bytes land in a sibling temp file and are
 /// renamed into place only once they are fully on disk.
+///
+/// A target that is not a regular file, such as `/dev/null` or a pipe, is
+/// written directly. Nothing can be renamed over it, and there is no scene
+/// file at such a path to protect from a partial write.
 pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write as _;
+
+    if let Ok(meta) = std::fs::metadata(path) {
+        if !meta.is_file() {
+            return std::fs::write(path, contents)
+                .with_context(|| format!("writing {}", path.display()));
+        }
+    }
 
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let stamp = std::time::SystemTime::now()
@@ -33,7 +44,14 @@ pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
     })();
     if let Err(e) = result {
         let _ = std::fs::remove_file(&tmp);
-        return Err(e).with_context(|| format!("writing {}", tmp.display()));
+        return Err(e).with_context(|| {
+            format!(
+                "writing {}; the result is written beside {} first and renamed into place, \
+                 so that directory has to be writable",
+                tmp.display(),
+                path.display()
+            )
+        });
     }
     std::fs::rename(&tmp, path)
         .inspect_err(|_| {

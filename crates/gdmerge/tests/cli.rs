@@ -621,7 +621,7 @@ fn legacy_position(v: &str) -> String {
 /// the same flags and labels its fallback uses.
 fn git_merge_file(ours: &Path, base: &Path, theirs: &Path) -> (String, Option<i32>) {
     let out = Command::new("git")
-        .args(["merge-file", "-p", "--diff3", "--marker-size=7"])
+        .args(["merge-file", "-p", "--marker-size=7"])
         .args(["-L", "ours", "-L", "base", "-L", "theirs"])
         .args([ours, base, theirs])
         .output()
@@ -710,6 +710,82 @@ fn unquoted_ids_in_a_format_3_file_take_the_same_path() {
     let (expected, expected_code) = git_merge_file(&o, &b, &t);
     assert_eq!(out.status.code(), expected_code);
     assert_eq!(stdout(&out), expected);
+}
+
+/// Runs `gdmerge merge` to stdout with one git config file standing in for the
+/// user's, so a `merge.conflictstyle` setting can be tried both ways.
+fn merge_with_gitconfig(base: &Path, ours: &Path, theirs: &Path, config: &Path) -> Output {
+    Command::new(BIN)
+        .args(["merge", "--base"])
+        .arg(base)
+        .arg("--ours")
+        .arg(ours)
+        .arg("--theirs")
+        .arg(theirs)
+        .env("GIT_CONFIG_GLOBAL", config)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .expect("running gdmerge")
+}
+
+/// The text fallback is git's own merge, so its markers follow the user's
+/// `merge.conflictstyle` rather than a style chosen here. gdmerge's own markers
+/// are always the two-sided form; the mergetool is what shows the base value.
+#[test]
+fn the_text_fallback_follows_git_conflictstyle_and_the_semantic_merge_does_not() {
+    let s = Scratch::new("conflictstyle");
+    let diff3 = s.write("diff3.gitconfig", "[merge]\n\tconflictstyle = diff3\n");
+    let plain = s.write("plain.gitconfig", "");
+
+    // A legacy file goes to the fallback, and this pair conflicts there.
+    let b = s.write("base.tscn", LEGACY_BASE);
+    let o = s.write("ours.tscn", &legacy_extents("Vector2( 10, 10 )"));
+    let t = s.write("theirs.tscn", &legacy_extents("Vector2( 24, 24 )"));
+
+    let out = merge_with_gitconfig(&b, &o, &t, &diff3);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).contains("||||||| base"), "{}", stdout(&out));
+
+    let out = merge_with_gitconfig(&b, &o, &t, &plain);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).contains("<<<<<<< ours"), "{}", stdout(&out));
+    assert!(!stdout(&out).contains("|||||||"), "{}", stdout(&out));
+
+    // A conflict gdmerge raises itself has no base section either way.
+    let b = s.write("cbase.tscn", CONFLICT_BASE);
+    let o = s.write("cours.tscn", &conflict_side("250.0"));
+    let t = s.write("ctheirs.tscn", &conflict_side("400.0"));
+    let out = merge_with_gitconfig(&b, &o, &t, &diff3);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).contains("<<<<<<< ours"), "{}", stdout(&out));
+    assert!(!stdout(&out).contains("|||||||"), "{}", stdout(&out));
+}
+
+/// `-O` may point at something that is not a file to be replaced, such as
+/// `/dev/null` from a script that only wants the exit status. The result is
+/// normally written beside the target and renamed over it, which a device
+/// cannot be, so such a target is written directly.
+#[cfg(unix)]
+#[test]
+fn merge_writes_directly_to_a_target_that_is_not_a_regular_file() {
+    let s = Scratch::new("dev-null");
+    let b = s.write("base.tscn", BASE);
+    let o = s.write("ours.tscn", OURS);
+    let t = s.write("theirs.tscn", THEIRS);
+    let out = gdmerge(&[
+        "merge",
+        "--base",
+        b.to_str().unwrap(),
+        "--ours",
+        o.to_str().unwrap(),
+        "--theirs",
+        t.to_str().unwrap(),
+        "-O",
+        "/dev/null",
+    ]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{err}");
+    assert!(err.is_empty(), "{err}");
 }
 
 /// `check` has to see the legacy reference spelling, or a dangling
