@@ -20,6 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `PackedByteArray("...") (16340 chars elided)`. The rule is one function every report goes
   through, with a seeded property test over long quoted and unquoted values holding it to the
   bound.
+- `gdmerge diff` shows values under the same rule. It cut every value at 72 characters, inside a
+  quoted string included, so an id near the cut came out as
+  `SubResource("RectangleShape2D_with_a_really_extremely_long_identifier...`.
 
 ## [0.3.4] - 2026-08-29
 
