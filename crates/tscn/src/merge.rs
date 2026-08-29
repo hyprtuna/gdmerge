@@ -84,6 +84,13 @@ impl MergeOutcome {
     }
 }
 
+/// A conflict together with the entity its rows describe, kept until the merged
+/// file's resource ids are known so the rows can show what the file shows.
+struct Pending {
+    holder: Option<EntityId>,
+    conflict: Conflict,
+}
+
 /// A resource-id rewriting function, applied while rendering a section that
 /// came from one particular side.
 type Remap<'a> = &'a dyn Fn(RefKind, &str) -> Option<String>;
@@ -217,7 +224,7 @@ pub fn merge(
     let vt = View::new(st, Which::Theirs, &align);
 
     let mut plan: HashMap<EntityId, Res> = HashMap::new();
-    let mut conflicts = Vec::new();
+    let mut pending: Vec<Pending> = Vec::new();
 
     let mut all: Vec<EntityId> = Vec::new();
     for id in vo.ids().iter().chain(vt.ids()).chain(vb.ids()) {
@@ -244,11 +251,14 @@ pub fn merge(
                 match merge_items(&vb, b, &vo, o, &vt, t) {
                     Ok((fields, props)) => Res::Merge { fields, props },
                     Err(key) => {
-                        conflicts.push(Conflict {
-                            entity: vo.describe(id),
-                            detail: clash_detail(&align, &vb, id, &key),
-                            key: Some(key),
-                            rows: conflict_rows(&vb, &vo, &vt, id),
+                        pending.push(Pending {
+                            holder: Some(id.clone()),
+                            conflict: Conflict {
+                                entity: vo.describe(id),
+                                detail: clash_detail(&align, &vb, id, &key),
+                                key: Some(key),
+                                rows: conflict_rows(&vb, &vo, &vt, id),
+                            },
                         });
                         Res::Conflict
                     }
@@ -260,11 +270,14 @@ pub fn merge(
                 if cb == co {
                     continue; // They deleted it and we left it alone.
                 }
-                conflicts.push(Conflict {
-                    entity: vo.describe(id),
-                    detail: "deleted by theirs, modified by ours".to_string(),
-                    key: None,
-                    rows: conflict_rows(&vb, &vo, &vt, id),
+                pending.push(Pending {
+                    holder: Some(id.clone()),
+                    conflict: Conflict {
+                        entity: vo.describe(id),
+                        detail: "deleted by theirs, modified by ours".to_string(),
+                        key: None,
+                        rows: conflict_rows(&vb, &vo, &vt, id),
+                    },
                 });
                 Res::Conflict
             }
@@ -272,11 +285,14 @@ pub fn merge(
                 if cb == ct {
                     continue; // We deleted it and they left it alone.
                 }
-                conflicts.push(Conflict {
-                    entity: vt.describe(id),
-                    detail: "deleted by ours, modified by theirs".to_string(),
-                    key: None,
-                    rows: conflict_rows(&vb, &vo, &vt, id),
+                pending.push(Pending {
+                    holder: Some(id.clone()),
+                    conflict: Conflict {
+                        entity: vt.describe(id),
+                        detail: "deleted by ours, modified by theirs".to_string(),
+                        key: None,
+                        rows: conflict_rows(&vb, &vo, &vt, id),
+                    },
                 });
                 Res::Conflict
             }
@@ -291,16 +307,18 @@ pub fn merge(
     // A merge that leaves the file pointing at a node that is no longer there
     // loads without complaint and does nothing, which is worse than a conflict.
     // So it becomes one, and the file is emitted again with that entity marked.
-    if conflicts.is_empty() {
+    if pending.is_empty() {
         let stale = stale_references(&text, &align, &vb, &vo, &vt, &mut plan);
         if !stale.is_empty() {
-            conflicts.extend(stale);
+            pending.extend(stale);
             order = merged_order(&vo, &vt, &plan);
             final_ids = assign_ids(&order, &vo, &vt);
             text = emit(ours, &order, &plan, &vb, &vo, &vt, &final_ids, &align, opts);
         }
     }
 
+    render_rows(&mut pending, &vb, &vo, &vt, &final_ids, &align, load_steps(&order));
+    let mut conflicts: Vec<Conflict> = pending.into_iter().map(|p| p.conflict).collect();
     conflicts.sort_by(|a, b| a.entity.cmp(&b.entity));
     MergeOutcome { text, conflicts }
 }
@@ -320,7 +338,7 @@ fn stale_references(
     vo: &View<'_>,
     vt: &View<'_>,
     plan: &mut HashMap<EntityId, Res>,
-) -> Vec<Conflict> {
+) -> Vec<Pending> {
     let Ok(doc) = Document::parse(text) else { return Vec::new() };
     let merged = Scene::new(&doc);
     // A reference that was already broken before anyone touched the file is not
@@ -368,11 +386,14 @@ fn stale_references(
         let showable = plan.contains_key(&holder)
             && (vo.section(&holder).is_some() || vt.section(&holder).is_some());
         if !showable {
-            conflicts.push(Conflict {
-                entity: reference.site.describe(),
-                detail,
-                key: None,
-                rows: Vec::new(),
+            conflicts.push(Pending {
+                holder: None,
+                conflict: Conflict {
+                    entity: reference.site.describe(),
+                    detail,
+                    key: None,
+                    rows: Vec::new(),
+                },
             });
             continue;
         }
@@ -388,11 +409,9 @@ fn stale_references(
         for row in rows.iter_mut().filter(|r| r.key == key) {
             row.differs = true;
         }
-        conflicts.push(Conflict {
-            entity: reference.site.describe(),
-            detail,
-            key: Some(key),
-            rows,
+        conflicts.push(Pending {
+            holder: Some(holder),
+            conflict: Conflict { entity: reference.site.describe(), detail, key: Some(key), rows },
         });
     }
     conflicts
@@ -655,22 +674,22 @@ fn remapper<'a>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn emit(
-    ours: &Document,
-    order: &[EntityId],
-    plan: &HashMap<EntityId, Res>,
+/// The `load_steps` of a merged file: one per resource, plus the file itself.
+fn load_steps(order: &[EntityId]) -> usize {
+    order.iter().filter(|id| matches!(id, EntityId::Ext(_) | EntityId::Sub(_))).count() + 1
+}
+
+/// Runs `f` with the replay for each side, which is how everything in the
+/// merged file is rendered: resource ids in the merged numbering and node paths
+/// in the merged naming.
+fn with_replays<R>(
     vb: &View<'_>,
     vo: &View<'_>,
     vt: &View<'_>,
     final_ids: &HashMap<EntityId, String>,
     align: &Alignment,
-    opts: &MergeOptions,
-) -> String {
-    let ext_count = order.iter().filter(|id| matches!(id, EntityId::Ext(_))).count();
-    let sub_count = order.iter().filter(|id| matches!(id, EntityId::Sub(_))).count();
-    let load_steps = ext_count + sub_count + 1;
-
+    f: impl FnOnce(&Replay<'_>, &Replay<'_>) -> R,
+) -> R {
     let map_ours = remapper(&vo.scene, final_ids);
     let map_theirs = remapper(&vt.scene, final_ids);
     let paths_ours = |p: &str| align.path(Which::Ours, p);
@@ -705,54 +724,119 @@ fn emit(
         ancestor_moved: &paths_base,
         into_ancestor: &theirs_into_base,
     };
+    f(&r_ours, &r_theirs)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit(
+    ours: &Document,
+    order: &[EntityId],
+    plan: &HashMap<EntityId, Res>,
+    vb: &View<'_>,
+    vo: &View<'_>,
+    vt: &View<'_>,
+    final_ids: &HashMap<EntityId, String>,
+    align: &Alignment,
+    opts: &MergeOptions,
+) -> String {
+    let load_steps = load_steps(order);
     let nl = ours.newline();
 
-    let mut out = String::new();
-    out.push_str(&ours.lead);
-    for (i, id) in order.iter().enumerate() {
-        match plan.get(id) {
-            Some(Res::Take(side)) => {
-                let (view, replay) = match side {
-                    Side::Ours => (vo, &r_ours),
-                    Side::Theirs => (vt, &r_theirs),
-                };
-                let section = view.section(id).expect("plan refers to a real section");
-                out.push_str(&render_section(section, id, final_ids, replay, load_steps, nl));
-            }
-            Some(Res::Merge { fields, props }) => {
-                out.push_str(&render_merged(
-                    id, fields, props, vo, vt, &r_ours, &r_theirs, final_ids, load_steps, nl,
-                ));
-            }
-            Some(Res::Conflict) => {
-                let mine = vo
-                    .section(id)
-                    .map(|s| render_section(s, id, final_ids, &r_ours, load_steps, nl));
-                let yours = vt
-                    .section(id)
-                    .map(|s| render_section(s, id, final_ids, &r_theirs, load_steps, nl));
-                let m = "<".repeat(opts.marker_size);
-                let e = "=".repeat(opts.marker_size);
-                let g = ">".repeat(opts.marker_size);
-                let _ = write!(out, "{m} {}{nl}", opts.ours_label);
-                if let Some(body) = mine {
-                    out.push_str(&body);
-                    out.push_str(nl);
+    with_replays(vb, vo, vt, final_ids, align, |r_ours, r_theirs| {
+        let mut out = String::new();
+        out.push_str(&ours.lead);
+        for (i, id) in order.iter().enumerate() {
+            match plan.get(id) {
+                Some(Res::Take(side)) => {
+                    let (view, replay) = match side {
+                        Side::Ours => (vo, r_ours),
+                        Side::Theirs => (vt, r_theirs),
+                    };
+                    let section = view.section(id).expect("plan refers to a real section");
+                    out.push_str(&render_section(section, id, final_ids, replay, load_steps, nl));
                 }
-                let _ = write!(out, "{e}{nl}");
-                if let Some(body) = yours {
-                    out.push_str(&body);
-                    out.push_str(nl);
+                Some(Res::Merge { fields, props }) => {
+                    out.push_str(&render_merged(
+                        id, fields, props, vo, vt, r_ours, r_theirs, final_ids, load_steps, nl,
+                    ));
                 }
-                let _ = write!(out, "{g} {}", opts.theirs_label);
+                Some(Res::Conflict) => {
+                    let mine = vo
+                        .section(id)
+                        .map(|s| render_section(s, id, final_ids, r_ours, load_steps, nl));
+                    let yours = vt
+                        .section(id)
+                        .map(|s| render_section(s, id, final_ids, r_theirs, load_steps, nl));
+                    let m = "<".repeat(opts.marker_size);
+                    let e = "=".repeat(opts.marker_size);
+                    let g = ">".repeat(opts.marker_size);
+                    let _ = write!(out, "{m} {}{nl}", opts.ours_label);
+                    if let Some(body) = mine {
+                        out.push_str(&body);
+                        out.push_str(nl);
+                    }
+                    let _ = write!(out, "{e}{nl}");
+                    if let Some(body) = yours {
+                        out.push_str(&body);
+                        out.push_str(nl);
+                    }
+                    let _ = write!(out, "{g} {}", opts.theirs_label);
+                }
+                None => continue,
             }
-            None => continue,
+            for _ in 0..separator_lines(id, order.get(i + 1)) {
+                out.push_str(nl);
+            }
         }
-        for _ in 0..separator_lines(id, order.get(i + 1)) {
-            out.push_str(nl);
+        out
+    })
+}
+
+/// Rewrites the two sides of every conflict row the way the merged file shows
+/// them.
+///
+/// Rows are gathered as conflicts are found, before the file's resource ids are
+/// assigned. A value naming a resource that then gets renumbered would read the
+/// same on both sides while the markers show two different ids, which is the
+/// case of a sub-resource used from several nodes and edited on both branches:
+/// each branch's copy survives, theirs under a new id.
+fn render_rows(
+    pending: &mut [Pending],
+    vb: &View<'_>,
+    vo: &View<'_>,
+    vt: &View<'_>,
+    final_ids: &HashMap<EntityId, String>,
+    align: &Alignment,
+    load_steps: usize,
+) {
+    with_replays(vb, vo, vt, final_ids, align, |r_ours, r_theirs| {
+        for p in pending.iter_mut() {
+            let Some(id) = &p.holder else { continue };
+            for row in &mut p.conflict.rows {
+                row.ours = vo
+                    .section(id)
+                    .and_then(|s| rendered_item(s, id, &row.key, final_ids, r_ours, load_steps));
+                row.theirs = vt
+                    .section(id)
+                    .and_then(|s| rendered_item(s, id, &row.key, final_ids, r_theirs, load_steps));
+            }
         }
+    })
+}
+
+/// One header field or property of a section, as the merged file has it.
+fn rendered_item(
+    section: &Section,
+    id: &EntityId,
+    key: &str,
+    final_ids: &HashMap<EntityId, String>,
+    replay: &Replay<'_>,
+    load_steps: usize,
+) -> Option<String> {
+    if let Some(f) = section.field(key) {
+        return Some(field_text(section, id, key, &f.value_raw, final_ids, replay, load_steps));
     }
-    out
+    section.prop(key).map(|p| with_rewrite(replay, section, |rw| p.rendered(rw)))
 }
 
 /// How many line breaks go between two sections, matching Godot's own writer:

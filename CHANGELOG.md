@@ -21,6 +21,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The conflict report shows the ids the merged file has. A sub-resource used from more than one
+  node and edited on both branches survives as two sub-resources, theirs under a new id, with a
+  conflict at each node referencing it. The stderr line for that conflict printed the same value
+  for both sides, `ours SubResource("1_s") / theirs SubResource("1_s")`, and `gdmerge mergetool`
+  showed the same in its table, because both were composed before the ids were assigned; the
+  markers in the file showed the real difference. The two sides are now rendered the way the file
+  renders them, so the report names the renumbered id.
 - `gdmerge check` now catches two siblings that share an `index`. The rule only read the bare
   spelling (`index=0`), and Godot writes the field quoted (`index="0"`), so the collision it was
   meant to report never was: a file with two `parent="." index="0"` nodes passed `check`, and the

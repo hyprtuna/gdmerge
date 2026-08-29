@@ -382,6 +382,47 @@ fn the_merge_driver_explains_conflicts_on_stderr() {
     assert!(!err.contains("CharacterBody2D"), "{err}");
 }
 
+/// A sub-resource used from more than one node is matched by its contents, so
+/// editing it on both branches leaves two copies, theirs under a new id, and a
+/// conflict at each node that references it. The stderr line has to show the
+/// ids the file shows: it used to print the same value for both sides, because
+/// it was composed before the renumbering.
+#[test]
+fn the_driver_reports_the_renumbered_id_on_a_shared_sub_resource_conflict() {
+    let s = Scratch::new("driver-renumbered");
+    let base = "[gd_scene load_steps=2 format=3 uid=\"uid://shared\"]\n\n\
+                [sub_resource type=\"RectangleShape2D\" id=\"1_s\"]\n\
+                size = Vector2(8, 8)\n\n\
+                [node name=\"Root\" type=\"Node2D\"]\n\n\
+                [node name=\"A\" type=\"CollisionShape2D\" parent=\".\"]\n\
+                shape = SubResource(\"1_s\")\n\n\
+                [node name=\"B\" type=\"CollisionShape2D\" parent=\".\"]\n\
+                shape = SubResource(\"1_s\")\n";
+    let b = s.write("base.tscn", base);
+    let o = s.write("ours.tscn", &base.replace("Vector2(8, 8)", "Vector2(10, 10)"));
+    let t = s.write("theirs.tscn", &base.replace("Vector2(8, 8)", "Vector2(24, 24)"));
+
+    let out = merge_to_stdout(&b, &o, &t);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    let lines: Vec<&str> = err.lines().filter(|l| l.contains("shape: ours")).collect();
+    assert_eq!(lines.len(), 2, "one line per conflicting node: {err}");
+    for line in &lines {
+        let (ours, theirs) = line.split_once(" / theirs ").expect("both sides on the line");
+        let ours = ours.rsplit("ours ").next().unwrap_or_default();
+        assert_ne!(ours, theirs, "the two sides shown must differ: {line}");
+    }
+    // And what is shown is what the markers hold, cut to the width the line
+    // allows a value.
+    let text = stdout(&out);
+    assert!(text.contains("id=\"RectangleShape2D_gdm0\""), "{text}");
+    assert!(
+        lines[0].contains("ours SubResource(\"1_s\") / theirs SubResource(\"RectangleShape2D_g"),
+        "{}",
+        lines[0]
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The real thing: a git merge that only succeeds because the driver is active.
 // ---------------------------------------------------------------------------
