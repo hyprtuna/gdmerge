@@ -254,6 +254,118 @@ fn positional_form_writes_the_result_into_the_ours_file() {
     assert!(written.contains("name=\"Player\""), "{written}");
 }
 
+/// Base, ours and theirs that set one property three different ways, which no
+/// merge algorithm can resolve on its own.
+const CONFLICT_BASE: &str = "\
+[gd_scene format=3 uid=\"uid://conflict\"]
+
+[node name=\"Player\" type=\"CharacterBody2D\"]
+speed = 100.0
+";
+
+fn conflict_side(speed: &str) -> String {
+    CONFLICT_BASE.replace("speed = 100.0", &format!("speed = {speed}"))
+}
+
+#[test]
+fn mergetool_prints_a_property_table_for_a_conflict() {
+    let s = Scratch::new("mergetool-table");
+    let b = s.write("base.tscn", CONFLICT_BASE);
+    let o = s.write("ours.tscn", &conflict_side("250.0"));
+    let t = s.write("theirs.tscn", &conflict_side("400.0"));
+    let m = s.write("merged.tscn", "");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    assert!(text.contains("1 conflict in"), "{text}");
+    assert!(text.contains("Conflict 1 of 1: root node \"Player\""), "{text}");
+    assert!(text.contains("property"), "{text}");
+    assert!(text.contains("base"), "{text}");
+    // The differing row is marked, and the agreeing ones are not.
+    let speed = text.lines().find(|l| l.contains("250.0")).expect("a speed row");
+    assert!(speed.trim_start().starts_with('>'), "{speed}");
+    assert!(speed.contains("400.0"), "both sides belong on one row: {speed}");
+    let ty = text.lines().find(|l| l.contains("CharacterBody2D")).expect("a type row");
+    assert!(!ty.trim_start().starts_with('>'), "{ty}");
+    // And it wrote the merged file, markers and all.
+    let written = std::fs::read_to_string(&m).expect("merged file written");
+    assert!(written.contains("<<<<<<<"), "{written}");
+}
+
+#[test]
+fn mergetool_shows_absence_for_a_delete_against_a_modify() {
+    let s = Scratch::new("mergetool-delete");
+    let b = s.write("base.tscn", CONFLICT_BASE);
+    let o = s.write("ours.tscn", "[gd_scene format=3 uid=\"uid://conflict\"]\n");
+    let t = s.write("theirs.tscn", &conflict_side("400.0"));
+    let m = s.write("merged.tscn", "");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    assert!(text.contains("deleted by ours, modified by theirs"), "{text}");
+    assert!(text.contains("(absent)"), "{text}");
+}
+
+#[test]
+fn mergetool_reports_a_clean_merge_and_writes_it() {
+    let s = Scratch::new("mergetool-clean");
+    let b = s.write("base.tscn", BASE);
+    let o = s.write("ours.tscn", OURS);
+    let t = s.write("theirs.tscn", THEIRS);
+    let m = s.write("merged.tscn", "");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "{}", stdout(&out));
+    assert!(stdout(&out).contains("no conflicts"), "{}", stdout(&out));
+    let written = std::fs::read_to_string(&m).expect("merged file written");
+    assert!(written.contains("uid://snd_step"), "{written}");
+    assert!(!written.contains("<<<<<<<"), "{written}");
+}
+
+#[test]
+fn the_merge_driver_explains_conflicts_on_stderr() {
+    let s = Scratch::new("driver-explains");
+    let b = s.write("base.tscn", CONFLICT_BASE);
+    let o = s.write("ours.tscn", &conflict_side("250.0"));
+    let t = s.write("theirs.tscn", &conflict_side("400.0"));
+
+    let out = gdmerge(&[
+        "merge",
+        "--base",
+        b.to_str().unwrap(),
+        "--ours",
+        o.to_str().unwrap(),
+        "--theirs",
+        t.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("speed: ours 250.0 / theirs 400.0"), "{err}");
+    assert!(err.contains("git mergetool --tool=gdmerge"), "{err}");
+    // Only the differing item is listed, not the whole node.
+    assert!(!err.contains("CharacterBody2D"), "{err}");
+}
+
 // ---------------------------------------------------------------------------
 // The real thing: a git merge that only succeeds because the driver is active.
 // ---------------------------------------------------------------------------
@@ -358,4 +470,49 @@ fn git_merge_succeeds_through_the_installed_driver() {
     assert!(!attributes.contains("merge=gdmerge"), "{attributes}");
     let driver = git(s.path(), &["config", "--get", "merge.gdmerge.driver"]);
     assert!(!driver.status.success(), "the driver config should be gone");
+    let tool = git(s.path(), &["config", "--get", "mergetool.gdmerge.cmd"]);
+    assert!(!tool.status.success(), "the mergetool config should be gone");
+}
+
+/// A conflict the driver cannot resolve, handed to `git mergetool --tool=gdmerge`.
+#[test]
+fn git_mergetool_explains_a_real_conflict() {
+    let s = Scratch::new("git-mergetool");
+    let dir = s.path();
+    assert!(git(dir, &["init", "-q", "-b", "main"]).status.success());
+    assert!(git(dir, &["config", "user.name", "Test"]).status.success());
+    assert!(git(dir, &["config", "user.email", "test@example.invalid"]).status.success());
+
+    std::fs::write(dir.join("level.tscn"), CONFLICT_BASE).unwrap();
+    assert!(git(dir, &["add", "."]).status.success());
+    assert!(git(dir, &["commit", "-qm", "base"]).status.success());
+
+    assert!(git(dir, &["checkout", "-qb", "faster"]).status.success());
+    std::fs::write(dir.join("level.tscn"), conflict_side("400.0")).unwrap();
+    assert!(git(dir, &["commit", "-qam", "speed up"]).status.success());
+
+    assert!(git(dir, &["checkout", "-q", "main"]).status.success());
+    std::fs::write(dir.join("level.tscn"), conflict_side("250.0")).unwrap();
+    assert!(git(dir, &["commit", "-qam", "tune speed"]).status.success());
+
+    let install = Command::new(BIN)
+        .current_dir(dir)
+        .arg("git-install")
+        .output()
+        .expect("running gdmerge git-install");
+    assert!(install.status.success(), "{}", String::from_utf8_lossy(&install.stderr));
+
+    // The driver runs, cannot resolve it, and says why on stderr.
+    let out = git(dir, &["merge", "--no-edit", "faster"]);
+    assert!(!out.status.success(), "this conflict is not resolvable");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("speed: ours 250.0 / theirs 400.0"), "{err}");
+
+    // Then the mergetool lays the two sides out.
+    let tool = git(dir, &["mergetool", "--no-prompt", "--tool=gdmerge"]);
+    let text = String::from_utf8_lossy(&tool.stdout);
+    assert!(text.contains("Conflict 1 of 1"), "{text}");
+    assert!(text.contains("speed"), "{text}");
+    assert!(text.contains("250.0"), "{text}");
+    assert!(text.contains("400.0"), "{text}");
 }
