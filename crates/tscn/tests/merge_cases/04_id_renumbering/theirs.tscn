@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://scene04"]
+
+[ext_resource type="Texture2D" uid="uid://tex_a" path="res://a.png" id="1_qqqqq"]
+[ext_resource type="Texture2D" uid="uid://tex_c" path="res://c.png" id="2_bbbbb"]
+
+[node name="Root" type="Node2D"]
+
+[node name="A" type="Sprite2D" parent="."]
+texture = ExtResource("1_qqqqq")
+
+[node name="C" type="Sprite2D" parent="."]
+texture = ExtResource("2_bbbbb")

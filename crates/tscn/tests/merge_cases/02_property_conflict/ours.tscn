@@ -1,0 +1,4 @@
+[gd_scene format=3 uid="uid://scene02"]
+
+[node name="Player" type="CharacterBody2D"]
+speed = 250.0

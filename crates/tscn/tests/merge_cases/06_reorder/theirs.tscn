@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://scene06"]
+
+[node name="UI" type="Control"]
+
+[node name="A" type="Label" parent="."]
+text = "hello"
+
+[node name="B" type="Label" parent="."]
+
+[node name="C" type="Label" parent="."]

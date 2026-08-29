@@ -1,0 +1,5 @@
+[gd_scene format=3 uid="uid://scene03"]
+
+[node name="Player" type="CharacterBody2D"]
+speed = 100.0
+jump_velocity = -400.0

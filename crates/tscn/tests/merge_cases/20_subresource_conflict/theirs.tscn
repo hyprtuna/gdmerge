@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://scene20"]
+
+[sub_resource type="Gradient" id="Gradient_1"]
+offsets = PackedFloat32Array(0, 0.25, 1)
+colors = PackedColorArray(0, 0, 0, 1, 1, 1, 1, 1)
+
+[node name="Root" type="Node2D"]
+
+[node name="G" type="GPUParticles2D" parent="."]
+gradient = SubResource("Gradient_1")

@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://scene06"]
+
+[node name="UI" type="Control"]
+
+[node name="C" type="Label" parent="."]
+
+[node name="A" type="Label" parent="."]
+
+[node name="B" type="Label" parent="."]

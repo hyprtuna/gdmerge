@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://scene10"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_theirs"]
+radius = 16.0
+
+[node name="Root" type="Node2D"]
+rotation = 1.5
+
+[node name="Hit" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_theirs")

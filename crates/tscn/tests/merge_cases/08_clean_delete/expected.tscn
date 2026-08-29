@@ -1,0 +1,4 @@
+[gd_scene format=3 uid="uid://scene07"]
+
+[node name="Root" type="Node2D"]
+modulate = Color(1, 1, 1, 0.5)

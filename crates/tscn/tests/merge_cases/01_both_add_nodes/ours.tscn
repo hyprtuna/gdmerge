@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://scene01"]
+
+[node name="Level" type="Node2D"]
+
+[node name="Ground" type="StaticBody2D" parent="."]
+
+[node name="Player" type="CharacterBody2D" parent="."]

@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://scene12"]
+
+[node name="Root" type="Node" groups=["alpha"]]
+tags = Array[StringName]([&"one", &"two"])
+lookup = Dictionary[String, int]({
+"a": 1,
+"b": 2
+})
+tint = #00ff88

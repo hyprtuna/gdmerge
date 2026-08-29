@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://scene05"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_base"]
+radius = 4.0
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_theirs"]
+height = 8.0
+
+[node name="Root" type="Node2D"]
+
+[node name="C" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_base")
+
+[node name="P" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_theirs")

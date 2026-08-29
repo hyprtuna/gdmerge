@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://scene07"]
+
+[node name="Root" type="Node2D"]
+
+<<<<<<< ours
+=======
+[node name="Doomed" type="Sprite2D" parent="."]
+visible = false
+>>>>>>> theirs

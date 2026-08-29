@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://scene09"]
+
+[node name="Menu" type="Control"]
+
+[node name="Start" type="Button" parent="."]
+
+[node name="Quit" type="Button" parent="."]
+
+[connection signal="pressed" from="Start" to="." method="_on_start_pressed" unbinds=1]
+[connection signal="mouse_entered" from="Start" to="." method="_on_start_hover"]

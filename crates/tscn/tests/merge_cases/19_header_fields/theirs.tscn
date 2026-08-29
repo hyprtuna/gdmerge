@@ -1,0 +1,5 @@
+[gd_scene format=3 uid="uid://scene19"]
+
+[node name="Root" type="Node2D"]
+
+[node name="A" type="Node2D" parent="." index="1" groups=["enemies"]]
