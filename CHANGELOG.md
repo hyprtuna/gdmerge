@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The Linux and macOS archives are flat. They used to nest a directory named after the archive,
+  so INSTALL's `tar xzf` followed by `install -m755 gdmerge` failed with "cannot stat 'gdmerge'";
+  the Windows zip was already flat. Every archive now holds `gdmerge` (or `gdmerge.exe`),
+  `LICENSE` and `README.md` at its top level, INSTALL names the archives literally instead of with
+  a `<version>` placeholder, and its commands were run verbatim against an archive built the way
+  the release workflow builds one.
+
 ## [0.3.3] - 2026-08-29
 
 ### Changed

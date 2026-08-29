@@ -6,19 +6,24 @@
 
 Download the archive for your platform from the
 [Releases page](https://github.com/hyprtuna/gdmerge/releases), verify it against the `.sha256` file
-published beside it, extract it, and put `gdmerge` somewhere on your `PATH`.
+published beside it, extract it, and put `gdmerge` somewhere on your `PATH`. Every archive holds
+`gdmerge` (or `gdmerge.exe`), `LICENSE` and `README.md` at its top level.
 
 | Platform | Archive |
 | --- | --- |
-| Linux, x86-64 | `gdmerge-<version>-x86_64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple silicon | `gdmerge-<version>-aarch64-apple-darwin.tar.gz` |
-| macOS, Intel | `gdmerge-<version>-x86_64-apple-darwin.tar.gz` |
-| Windows, x86-64 | `gdmerge-<version>-x86_64-pc-windows-msvc.zip` |
+| Linux, x86-64 | `gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS, Apple silicon | `gdmerge-v0.3.4-aarch64-apple-darwin.tar.gz` |
+| macOS, Intel | `gdmerge-v0.3.4-x86_64-apple-darwin.tar.gz` |
+| Windows, x86-64 | `gdmerge-v0.3.4-x86_64-pc-windows-msvc.zip` |
 
 ```console
-$ tar xzf gdmerge-*-x86_64-unknown-linux-gnu.tar.gz
+$ sha256sum -c gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz.sha256
+gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz: OK
+$ tar xzf gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz
 $ install -m755 gdmerge ~/.local/bin/gdmerge
 ```
+
+On macOS, `shasum -a 256 -c` takes the place of `sha256sum -c`.
 
 On macOS the binaries are unsigned, so the first run may need
 `xattr -d com.apple.quarantine ./gdmerge`.

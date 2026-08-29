@@ -66,7 +66,8 @@ jobs:
           cp "target/${{ matrix.target }}/release/gdmerge" "$staging/"
           cp LICENSE "$staging/"
           cp README.md "$staging/"
-          tar czf "${staging}.tar.gz" "$staging"
+          # Flat, like the zip: the binary is at the top level of the archive.
+          tar czf "${staging}.tar.gz" -C "$staging" gdmerge LICENSE README.md
 
       - name: Package (zip)
         if: matrix.archive_ext == 'zip'
