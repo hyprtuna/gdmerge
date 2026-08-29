@@ -27,6 +27,10 @@ const COMMAND: &str = "if command -v gdmerge >/dev/null 2>&1; then \
 // git runs a mergetool command through the shell with these variables set.
 const MERGETOOL_COMMAND: &str = "gdmerge mergetool \"$BASE\" \"$LOCAL\" \"$REMOTE\" \"$MERGED\"";
 const MARKER: &str = "# gdmerge";
+/// Appended to the marker when `add_attributes` had to end the file's last
+/// line before writing its block, so `remove_attributes` can take that newline
+/// away again and hand back the file byte for byte.
+const MARKER_NOTE: &str = " (the line above had no newline)";
 const PATTERNS: [&str; 2] = ["*.tscn", "*.tres"];
 
 pub fn install(global: bool) -> Result<i32> {
@@ -69,28 +73,38 @@ pub fn uninstall(global: bool) -> Result<i32> {
     // Only a file that is actually configured is touched. Looking one up the
     // way `install` does would register a default file on the way out.
     let Some(attributes) = scope.configured_attributes_path()? else { return Ok(0) };
-    match remove_attributes(&attributes)? {
-        Removal::Nothing => {}
-        Removal::Kept => {
-            println!("removed gdmerge rules from {}", attributes.display());
-            println!("left the file in place: it has rules gdmerge did not write");
-            if matches!(scope, Scope::Global) {
-                println!("core.attributesfile still names it");
-            }
+    let Some(kept) = remove_attributes(&attributes)? else { return Ok(0) };
+
+    // A file that held nothing else goes away, when it is one `install` would
+    // have created: a repository's `.gitattributes`, or the default file
+    // `install --global` registers. A file at a path of the user's own stays,
+    // however empty, along with the setting that names it.
+    let default_file = matches!(scope, Scope::Global)
+        && default_global_attributes().ok().as_ref() == Some(&attributes);
+    let ours_only = kept.trim().is_empty();
+    if ours_only && (default_file || matches!(scope, Scope::Repo(_))) {
+        std::fs::remove_file(&attributes)
+            .with_context(|| format!("removing {}", attributes.display()))?;
+        println!("removed {}, which held nothing but gdmerge rules", attributes.display());
+        if default_file {
+            git(&["config", "--global", "--unset", "core.attributesfile"])?;
+            println!("unset core.attributesfile, which named it");
         }
-        Removal::Emptied => {
-            println!("removed {}, which held nothing but gdmerge rules", attributes.display());
-            if matches!(scope, Scope::Global) {
-                if Some(&attributes) == default_global_attributes().ok().as_ref() {
-                    git(&["config", "--global", "--unset", "core.attributesfile"])?;
-                    println!("unset core.attributesfile, which named it");
-                } else {
-                    println!(
-                        "left core.attributesfile set: it names a file gdmerge git-install did not \
-                         register"
-                    );
-                }
-            }
+        return Ok(0);
+    }
+
+    std::fs::write(&attributes, &kept)
+        .with_context(|| format!("writing {}", attributes.display()))?;
+    println!("removed gdmerge rules from {}", attributes.display());
+    if ours_only {
+        println!(
+            "left the file in place, empty, and core.attributesfile naming it: both are yours, \
+             not gdmerge git-install's"
+        );
+    } else {
+        println!("left the file in place: it has rules gdmerge did not write");
+        if matches!(scope, Scope::Global) {
+            println!("core.attributesfile still names it");
         }
     }
     Ok(0)
@@ -203,13 +217,15 @@ fn add_attributes(path: &Path) -> Result<bool> {
         return Ok(false);
     }
     let mut out = existing;
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
+    let mut marker = MARKER.to_string();
     if !out.is_empty() {
+        if !out.ends_with('\n') {
+            out.push('\n');
+            marker.push_str(MARKER_NOTE);
+        }
         out.push('\n');
     }
-    out.push_str(MARKER);
+    out.push_str(&marker);
     out.push('\n');
     for line in wanted {
         out.push_str(&line);
@@ -224,36 +240,35 @@ fn add_attributes(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-/// What `remove_attributes` did to the file.
-enum Removal {
-    /// The file is missing or has no gdmerge lines in it.
-    Nothing,
-    /// gdmerge's lines are gone and the rest of the file is as it was.
-    Kept,
-    /// Nothing but gdmerge's lines was in the file, so it is gone too.
-    Emptied,
-}
-
-/// Removes the lines `add_attributes` wrote and nothing else. A file that held
-/// nothing else is deleted rather than left empty, which is what putting it
-/// back the way it was means when `add_attributes` created it.
-fn remove_attributes(path: &Path) -> Result<Removal> {
-    let Ok(existing) = std::fs::read_to_string(path) else { return Ok(Removal::Nothing) };
+/// What the file holds once the lines `add_attributes` wrote are taken out,
+/// byte for byte, or `None` when there were none to take out.
+///
+/// Nothing is written here; the caller decides whether what is left is a file
+/// worth keeping. Everything that is not gdmerge's is kept exactly as it was,
+/// line endings and a missing final newline included: the blank line written
+/// before the block goes, and so does the newline given to the previous last
+/// line when the marker records that one was.
+fn remove_attributes(path: &Path) -> Result<Option<String>> {
+    let Ok(existing) = std::fs::read_to_string(path) else { return Ok(None) };
     let drop: Vec<String> = PATTERNS.iter().map(|p| format!("{p} merge={DRIVER}")).collect();
-    let kept: Vec<&str> = existing
-        .lines()
-        .filter(|l| l.trim() != MARKER && !drop.iter().any(|d| d == l.trim()))
-        .collect();
-    if kept.len() == existing.lines().count() {
-        return Ok(Removal::Nothing);
+    let noted = format!("{MARKER}{MARKER_NOTE}");
+    let mut kept = String::new();
+    let mut removed = false;
+    for piece in existing.split_inclusive('\n') {
+        let line = piece.trim_end_matches(['\n', '\r']).trim();
+        if line == MARKER || line == noted {
+            removed = true;
+            if kept.ends_with("\n\n") {
+                kept.pop();
+            }
+            if line == noted && kept.ends_with('\n') {
+                kept.pop();
+            }
+        } else if drop.iter().any(|d| d == line) {
+            removed = true;
+        } else {
+            kept.push_str(piece);
+        }
     }
-    let out = kept.join("\n");
-    let out = out.trim_end_matches('\n');
-    if out.trim().is_empty() {
-        std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
-        return Ok(Removal::Emptied);
-    }
-    std::fs::write(path, format!("{out}\n"))
-        .with_context(|| format!("writing {}", path.display()))?;
-    Ok(Removal::Kept)
+    Ok(removed.then_some(kept))
 }
