@@ -16,8 +16,10 @@
 mod doc;
 mod error;
 mod lex;
+mod scene;
 mod value;
 
 pub use doc::{Document, Field, Property, Section, SectionKind};
 pub use error::{ParseError, ParseErrorKind};
+pub use scene::{node_path, EntityId, Scene};
 pub use value::{RefKind, Value, ValueRef};
