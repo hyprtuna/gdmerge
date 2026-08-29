@@ -16,6 +16,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a `<version>` placeholder, and its commands were run verbatim against an archive built the way
   the release workflow builds one.
 
+### Fixed
+
+- `gdmerge git-uninstall --global` puts the account back the way it was. It left the
+  `core.attributesfile` entry that `git-install --global` had registered, and the attributes file
+  itself, emptied; looking the file up the way `git-install` does, it could even register one on
+  the way out. It now removes a file that held nothing but gdmerge's rules, unsets
+  `core.attributesfile` when that entry names the default file `git-install --global` registers,
+  and otherwise leaves the file and the entry alone and says what it left and why. The same
+  applies to a repository's `.gitattributes` that `git-install` created.
+
 ## [0.3.3] - 2026-08-29
 
 ### Changed

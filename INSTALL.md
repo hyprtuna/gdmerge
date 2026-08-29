@@ -92,7 +92,11 @@ $ gdmerge git-uninstall          # this repository
 $ gdmerge git-uninstall --global # your user account
 ```
 
-This removes only the lines `git-install` added.
+This removes the driver and mergetool definitions and the lines `git-install` added to the
+attributes file. A file that held nothing else is removed as well, and for the user account so is
+the `core.attributesfile` entry, when it names the default file `git-install --global` registers.
+A file with other rules in it, or a `core.attributesfile` naming a file of your own, is left in
+place, and `git-uninstall` says so.
 
 ## 3. Verify it is active
 
