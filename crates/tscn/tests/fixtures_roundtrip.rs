@@ -51,3 +51,14 @@ fn no_fixture_differs_from_itself() {
         assert!(d.is_empty(), "{}: {:?}", path.display(), d.changes);
     }
 }
+
+#[test]
+fn merging_a_fixture_with_itself_is_the_identity() {
+    for path in fixtures() {
+        let src = std::fs::read_to_string(&path).expect("fixture is UTF-8");
+        let doc = Document::parse(&src).expect("fixture parses");
+        let outcome = tscn::merge(&doc, &doc, &doc, &tscn::MergeOptions::default());
+        assert!(outcome.is_clean(), "{}: self-merge conflicted", path.display());
+        assert_eq!(outcome.text, src, "{}: self-merge changed the file", path.display());
+    }
+}
