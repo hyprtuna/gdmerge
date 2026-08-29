@@ -23,6 +23,7 @@ mod error;
 pub mod fuzz;
 mod lex;
 mod merge;
+mod nodepath;
 mod scene;
 mod value;
 

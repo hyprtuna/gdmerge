@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 
 use crate::doc::{Document, SectionKind};
+use crate::nodepath::{findings, Resolution};
 use crate::scene::node_path;
 use crate::value::RefKind;
 
@@ -137,7 +138,48 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
     }
 
     check_nodes(doc, &mut r);
+    check_node_paths(doc, &mut r);
     r
+}
+
+/// Every `NodePath` in the file has to name something.
+///
+/// A path that definitely resolves to nothing is an error: it is a scene wired
+/// to a node that is not there, which loads fine and then does nothing. Paths
+/// that leave the file, reach into an instanced scene, or use a unique name
+/// this file does not declare cannot be judged from here, so they are reported
+/// as warnings or not at all rather than guessed at.
+fn check_node_paths(doc: &Document, r: &mut CheckReport) {
+    for (reference, outcome) in findings(doc) {
+        match outcome {
+            Resolution::Missing(target) => r.error(format!(
+                "NodePath(\"{}\") in {} points at \"{}\", which is not a node in this file",
+                reference.path,
+                reference.site.describe(),
+                target
+            )),
+            Resolution::Instanced => r.warn(format!(
+                "NodePath(\"{}\") in {} reaches into an instanced scene and cannot be checked here",
+                reference.path,
+                reference.site.describe()
+            )),
+            // A file with no instanced scenes has nowhere else for a unique
+            // name to come from, so an unknown one is definitely broken.
+            Resolution::UnknownUniqueName { name, supplied_elsewhere: false } => r.error(format!(
+                "NodePath(\"{}\") in {} uses the unique name \"%{}\", which no node in this file declares",
+                reference.path,
+                reference.site.describe(),
+                name
+            )),
+            Resolution::UnknownUniqueName { name, .. } => r.warn(format!(
+                "NodePath(\"{}\") in {} uses the unique name \"%{}\", which this file does not declare; an instanced scene may supply it",
+                reference.path,
+                reference.site.describe(),
+                name
+            )),
+            Resolution::Node(_) | Resolution::Outside => {}
+        }
+    }
 }
 
 fn check_nodes(doc: &Document, r: &mut CheckReport) {

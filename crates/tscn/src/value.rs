@@ -166,6 +166,38 @@ impl Value {
         }
     }
 
+    /// Calls `visit` with the text of every `NodePath("...")` in this value,
+    /// however deeply it is nested inside arrays, dictionaries or other calls.
+    pub fn visit_node_paths(&self, visit: &mut dyn FnMut(&str)) {
+        match self {
+            Value::Call { name, args } => {
+                if name == "NodePath" {
+                    if let [Value::Str(path)] = args.as_slice() {
+                        visit(path);
+                        return;
+                    }
+                }
+                for a in args {
+                    a.visit_node_paths(visit);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|v| v.visit_node_paths(visit)),
+            Value::TypedArray { items, .. } => items.iter().for_each(|v| v.visit_node_paths(visit)),
+            Value::Dict(entries) => entries.iter().for_each(|(k, v)| {
+                k.visit_node_paths(visit);
+                v.visit_node_paths(visit);
+            }),
+            Value::TypedDict { entries, .. } => entries.iter().for_each(|(k, v)| {
+                k.visit_node_paths(visit);
+                v.visit_node_paths(visit);
+            }),
+            Value::Object { props, .. } => {
+                props.iter().for_each(|(_, v)| v.visit_node_paths(visit))
+            }
+            _ => {}
+        }
+    }
+
     /// The string payload of a `"..."` literal, if this is one.
     pub fn as_str(&self) -> Option<&str> {
         match self {
