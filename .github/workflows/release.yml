@@ -133,33 +133,15 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # A version already on crates.io is left alone, so re-running a release,
-      # or cutting one that was published by hand, stays green instead of
-      # failing on a duplicate upload.
+      # Refuses a release that would put something older back on top of what is
+      # live, or one that has nothing left to do, rather than uploading it or
+      # passing quietly. A half finished release still completes.
       - name: Work out what still needs publishing
         id: needed
         shell: bash
-        run: |
-          version=$(cargo metadata --no-deps --format-version 1 |
-            python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          any=false
-          for crate in tscn gdmerge; do
-            # crates.io rejects requests without a User-Agent.
-            if curl -sf -A "gdmerge-release-workflow" \
-              "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
-              echo "$crate $version is already published"
-              echo "$crate=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "$crate $version needs publishing"
-              echo "$crate=true" >> "$GITHUB_OUTPUT"
-              any=true
-            fi
-          done
-          echo "any=$any" >> "$GITHUB_OUTPUT"
+        run: python3 .github/scripts/publish-plan.py tscn gdmerge
 
       - name: Exchange the OIDC token for a crates.io token
-        if: steps.needed.outputs.any == 'true'
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
