@@ -29,7 +29,7 @@ jobs:
         target: [lex, value, document]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # libFuzzer needs a sanitizer, which needs nightly.
       - name: Install Rust nightly
@@ -65,7 +65,7 @@ jobs:
 
       - name: Keep any crash that was found
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts/
