@@ -1,9 +1,12 @@
-[gd_scene format=3 uid="uid://npbroken"]
+[gd_scene format=3 uid="uid://strand"]
 
 [node name="Level" type="Node2D"]
 
 <<<<<<< ours
+[node name="Shadow" type="RemoteTransform2D" parent="."]
+update_rotation = true
 =======
 [node name="Shadow" type="RemoteTransform2D" parent="."]
+update_rotation = true
 remote_path = NodePath("../Hero")
 >>>>>>> theirs
