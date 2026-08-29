@@ -207,3 +207,32 @@ fn reports_the_line_of_a_syntax_error() {
         .unwrap_err();
     assert_eq!(err.line, 5, "error should point at the unterminated call");
 }
+
+/// Nesting is parsed recursively, so an unbounded depth means a file with a few
+/// thousand opening brackets aborts the process instead of failing to parse.
+#[test]
+fn deeply_nested_values_are_rejected_not_fatal() {
+    for depth in [200usize, 5_000, 200_000] {
+        let src = format!(
+            "[gd_scene format=3]\n\n[node name=\"R\" type=\"Node\"]\nx = {}{}\n",
+            "[".repeat(depth),
+            "]".repeat(depth)
+        );
+        let err = Document::parse(&src).expect_err("should be refused, not accepted");
+        assert!(
+            matches!(err.kind, tscn::ParseErrorKind::ValueTooDeep(_)),
+            "depth {depth} gave {err}"
+        );
+    }
+}
+
+/// The limit has to be well clear of anything a real scene contains.
+#[test]
+fn ordinary_nesting_is_still_accepted() {
+    let src = format!(
+        "[gd_scene format=3]\n\n[node name=\"R\" type=\"Node\"]\nx = {}{}\n",
+        "[".repeat(100),
+        "]".repeat(100)
+    );
+    round_trips(&src);
+}
