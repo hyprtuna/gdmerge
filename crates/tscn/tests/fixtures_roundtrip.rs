@@ -43,6 +43,18 @@ fn every_fixture_round_trips_byte_for_byte() {
 }
 
 #[test]
+fn every_fixture_passes_structural_checks() {
+    for path in fixtures() {
+        let src = std::fs::read_to_string(&path).expect("fixture is UTF-8");
+        let doc = Document::parse(&src).expect("fixture parses");
+        let report = tscn::check(&doc, &src);
+        let errors: Vec<_> = report.errors().map(|i| i.message.clone()).collect();
+        assert!(errors.is_empty(), "{}: {errors:?}", path.display());
+    }
+}
+
+/// A file is identical to itself, so diffing it against itself finds nothing.
+#[test]
 fn no_fixture_differs_from_itself() {
     for path in fixtures() {
         let src = std::fs::read_to_string(&path).expect("fixture is UTF-8");
@@ -52,6 +64,7 @@ fn no_fixture_differs_from_itself() {
     }
 }
 
+/// Merging a file with itself, from itself, is the identity.
 #[test]
 fn merging_a_fixture_with_itself_is_the_identity() {
     for path in fixtures() {

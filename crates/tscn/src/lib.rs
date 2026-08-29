@@ -13,6 +13,7 @@
 //! assert!(doc.is_scene());
 //! ```
 
+mod check;
 mod diff;
 mod doc;
 mod error;
@@ -21,6 +22,7 @@ mod merge;
 mod scene;
 mod value;
 
+pub use check::{check, CheckIssue, CheckReport, Severity};
 pub use diff::{diff, Change, Diff, PropertyChange};
 pub use doc::{Document, Field, Property, Section, SectionKind};
 pub use error::{ParseError, ParseErrorKind};
