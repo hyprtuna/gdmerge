@@ -14,6 +14,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directory; the documented commands use `install -D`, which creates it, with the `mkdir -p`
   alternative for macOS, whose `install` has no `-D`. The whole sequence was run verbatim under a
   home directory with no `.local`.
+- The README's `git mergetool` block is the whole console run, git's preamble and its closing
+  `merge of player.tscn failed` included, with a sentence saying which lines are git's and that
+  the last one is expected whenever conflicts remain. It presented a trimmed transcript as a whole
+  console run, and used `level.tscn` without `--no-prompt` beside an image showing `player.tscn` with
+  it; text and image now show the same example. `docs/demo.sh` records under its own home
+  directory and global git config, twice, and fails on any difference: the committed `demo.svg`
+  had been recorded with the author's `merge.conflictstyle = diff3` leaking in, so its first merge
+  showed markers on lines 4, 8 and 10 where a clean environment gives 4, 6 and 8. It is
+  re-recorded; `conflict.svg` comes out byte for byte the same.
 
 ### Fixed
 
