@@ -11,6 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The README's sub-resource passages describe what 0.3.0 shipped. The comparison table and the
+  limitations list still said a sub-resource changed on both branches produced two sub-resources and
+  a conflict at the referencing node. Since 0.3.0 sub-resources are matched by where they are used as
+  well as by content: edits to different properties merge into one sub-resource, and edits to the
+  same property conflict on the `[sub_resource]` itself. What remains true, and is now what the
+  limitation says, is that a sub-resource referenced from more than one node, or from none, is still
+  matched by its contents alone.
 - The README and the pre-commit hook description now separate what `gdmerge check` fails on from
   what it only warns about. A stale `load_steps` was listed among the things `check` validates,
   which read as a promise that it would fail the check and so block a commit through the hook. It
