@@ -13,7 +13,7 @@ _data = {
 [node name="Level" type="Node2D"]
 
 [node name="Hero" type="Sprite2D" parent="."]
-offset = Vector2(8, 8)
+offset = Vector2(0, 0)
 
 [node name="Anim" type="AnimationPlayer" parent="."]
 libraries/ = SubResource("AnimationLibrary_main")

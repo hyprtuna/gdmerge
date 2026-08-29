@@ -209,10 +209,10 @@ fn paths_nested_inside_arrays_and_dictionaries_are_found() {
     assert_eq!(errors.len(), 2, "{errors:?}");
 }
 
-/// The reason all of this exists: a rename that leaves a reference behind now
-/// stops the merge instead of producing a scene wired to nothing.
+/// The reason all of this exists: a rename no longer strands the references to
+/// the node it moved.
 #[test]
-fn a_rename_that_strands_a_reference_becomes_a_conflict() {
+fn a_rename_carries_its_references_with_it() {
     let base = format!(
         "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\n\
          [node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]\n\
@@ -223,6 +223,40 @@ fn a_rename_that_strands_a_reference_becomes_a_conflict() {
     let ours = base.replace("name=\"Hero\"", "name=\"Player\"");
     let theirs = base.replace("speed = 100.0", "speed = 250.0");
 
+    let merged = |a: &str, b: &str| {
+        tscn::merge(
+            &Document::parse(&base).unwrap(),
+            &Document::parse(a).unwrap(),
+            &Document::parse(b).unwrap(),
+            &MergeOptions::default(),
+        )
+    };
+    for (a, b) in [(&ours, &theirs), (&theirs, &ours)] {
+        let outcome = merged(a, b);
+        assert!(outcome.is_clean(), "{:?}", outcome.conflicts);
+        assert!(
+            outcome.text.contains("remote_path = NodePath(\"../Player\")"),
+            "the reference should follow the rename:\n{}",
+            outcome.text
+        );
+        assert!(!outcome.text.contains("Hero"), "{}", outcome.text);
+    }
+}
+
+/// A reference the merge genuinely breaks, by deleting what it named, still
+/// stops the merge rather than producing a scene wired to nothing.
+#[test]
+fn deleting_a_node_another_branch_references_conflicts() {
+    let base = format!(
+        "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\n\
+         [node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]\n"
+    );
+    let ours = format!("{HEADER}[node name=\"Level\" type=\"Node2D\"]\n");
+    let theirs = format!(
+        "{base}\n[node name=\"Shadow\" type=\"RemoteTransform2D\" parent=\".\"]\n\
+         remote_path = NodePath(\"../Hero\")\n"
+    );
+
     let outcome = tscn::merge(
         &Document::parse(&base).unwrap(),
         &Document::parse(&ours).unwrap(),
@@ -230,7 +264,88 @@ fn a_rename_that_strands_a_reference_becomes_a_conflict() {
         &MergeOptions::default(),
     );
     assert!(!outcome.is_clean(), "should not merge silently:\n{}", outcome.text);
-    let detail = &outcome.conflicts[0].detail;
-    assert!(detail.contains("remote_path"), "{detail}");
-    assert!(detail.contains("Hero"), "{detail}");
+    assert!(outcome.conflicts[0].detail.contains("Hero"), "{:?}", outcome.conflicts);
+}
+
+/// Breakage that was already in the ancestor is not this merge's doing, so it
+/// passes through instead of blocking unrelated work. `check` still reports it.
+#[test]
+fn a_reference_that_was_already_broken_does_not_block_a_merge() {
+    let base = format!(
+        "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\
+         stale = NodePath(\"Ghost\")\n\n\
+         [node name=\"Hero\" type=\"Node2D\" parent=\".\"]\n"
+    );
+    let ours = base.replace(
+        "[node name=\"Hero\"",
+        "[node name=\"Extra\" type=\"Node\" parent=\".\"]\n\n[node name=\"Hero\"",
+    );
+    let theirs = format!("{base}\n[node name=\"Other\" type=\"Node\" parent=\".\"]\n");
+
+    let outcome = tscn::merge(
+        &Document::parse(&base).unwrap(),
+        &Document::parse(&ours).unwrap(),
+        &Document::parse(&theirs).unwrap(),
+        &MergeOptions::default(),
+    );
+    assert!(outcome.is_clean(), "{:?}", outcome.conflicts);
+    assert!(!errors(&outcome.text).is_empty(), "check should still report it");
+}
+
+/// Rewriting resolves against the tree rather than matching text, so a node
+/// whose name is a prefix of another's is not caught up in its rename.
+#[test]
+fn a_rename_does_not_touch_a_similarly_named_node() {
+    let base = format!(
+        "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\n\
+         [node name=\"Player\" type=\"Node2D\" parent=\".\"]\n\n\
+         [node name=\"PlayerCamera\" type=\"Camera2D\" parent=\".\"]\n"
+    );
+    let ours = base.replace("name=\"Player\" type=\"Node2D\"", "name=\"Hero\" type=\"Node2D\"");
+    let theirs = format!(
+        "{base}\n[node name=\"Watcher\" type=\"Node\" parent=\".\"]\n\
+         a = NodePath(\"../Player\")\n\
+         b = NodePath(\"../PlayerCamera\")\n"
+    );
+
+    let outcome = tscn::merge(
+        &Document::parse(&base).unwrap(),
+        &Document::parse(&ours).unwrap(),
+        &Document::parse(&theirs).unwrap(),
+        &MergeOptions::default(),
+    );
+    assert!(outcome.is_clean(), "{:?}", outcome.conflicts);
+    assert!(outcome.text.contains("a = NodePath(\"../Hero\")"), "{}", outcome.text);
+    assert!(
+        outcome.text.contains("b = NodePath(\"../PlayerCamera\")"),
+        "the other node must be untouched:\n{}",
+        outcome.text
+    );
+}
+
+/// A path measured from two different nodes to two different targets cannot be
+/// rewritten with certainty, so it is left as it is.
+#[test]
+fn an_ambiguous_path_is_left_alone() {
+    // "Thing" resolves from the holder and from the root, to different nodes.
+    let base = format!(
+        "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\n\
+         [node name=\"Thing\" type=\"Node\" parent=\".\"]\n\n\
+         [node name=\"Holder\" type=\"Node\" parent=\".\"]\n\n\
+         [node name=\"Thing\" type=\"Node\" parent=\"Holder\"]\n"
+    );
+    let ours = base.replace(
+        "[node name=\"Thing\" type=\"Node\" parent=\"Holder\"]",
+        "[node name=\"Moved\" type=\"Node\" parent=\"Holder\"]",
+    );
+    let theirs = format!("{base}\npick = NodePath(\"Thing\")\n");
+    let outcome = tscn::merge(
+        &Document::parse(&base).unwrap(),
+        &Document::parse(&ours).unwrap(),
+        &Document::parse(&theirs).unwrap(),
+        &MergeOptions::default(),
+    );
+    // Whatever it decides, it must not silently point somewhere else.
+    let kept = outcome.text.contains("NodePath(\"Thing\")");
+    assert!(kept || !outcome.is_clean(), "either left alone or conflicted:\n{}", outcome.text);
 }

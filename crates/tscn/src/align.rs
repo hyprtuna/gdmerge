@@ -161,6 +161,14 @@ impl Alignment {
             .collect()
     }
 
+    /// The path a node had in the base, given where the merge puts it.
+    pub(crate) fn base_path_of(&self, merged: &str) -> Option<String> {
+        self.paths[&Which::Base]
+            .iter()
+            .find(|(_, after)| after.as_str() == merged)
+            .map(|(before, _)| before.clone())
+    }
+
     pub(crate) fn is_contested(&self, base_path: &str) -> bool {
         self.contested.contains(base_path)
     }

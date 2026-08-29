@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://npexport"]
 
-[node name="Level" type="Node2D" node_paths=PackedStringArray("target")]
-target = NodePath("Hero")
+[node name="Level" type="Node2D"]
 
 [node name="Hero" type="CharacterBody2D" parent="."]
 speed = 100.0

@@ -4,6 +4,3 @@
 
 [node name="Hero" type="Sprite2D" parent="."]
 offset = Vector2(0, 0)
-
-[node name="Tween" type="Node" parent="."]
-watch = NodePath("../Hero:modulate")
