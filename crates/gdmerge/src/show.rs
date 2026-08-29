@@ -7,6 +7,10 @@
 //! [`shown`], which bounds it and never cuts inside a quoted string: an id is
 //! short and comes out whole, and a long string is replaced by `"..."` with a
 //! count of what was left out, keeping the type around it.
+//!
+//! Identities go through the same rule. A node name, a parent path or a
+//! property key is text the file may make as long as it likes, so a report
+//! that printed them whole would be unbounded through its names instead.
 
 /// Longest rendering of one value, in characters. Every renderer in the tool
 /// goes through [`shown`], so this bounds any value it prints.
@@ -162,12 +166,18 @@ mod tests {
     const ID: &[char] = &['a', 'b', 'c', '_', '1', '2', 'S', 'h', 'a', 'p', 'e'];
     const JUNK: &[char] = &['0', '1', '9', ',', ' ', '.', '-', 'x', '(', ')', '[', ']'];
     const TEXT: &[char] = &['A', 'z', '0', ' ', '\\', '"', ',', '\n', 'é'];
+    /// What a node name or a property key is made of: no quotes, no spaces,
+    /// so the cut cannot fall back on either.
+    const NAME: &[char] = &['P', 'l', 'a', 'y', 'e', 'r', '_', '2', 'D', 'ü', '/', '.'];
 
+    /// Values and identities alike: a node name, a parent path and a
+    /// property key are text the file may make as long as it likes, and each
+    /// reaches a report through the same function as a value.
     #[test]
     fn every_rendering_stays_within_the_bound() {
         let mut rng = Rng(0x5eed);
-        for case in 0..4000 {
-            let value = match case % 5 {
+        for case in 0..8000 {
+            let value = match case % 8 {
                 0 => {
                     let n = rng.below(5000);
                     rng.text(n, JUNK)
@@ -190,9 +200,30 @@ mod tests {
                         .collect();
                     format!("Array[Resource]([{}])", refs.join(", "))
                 }
-                _ => {
+                4 => {
                     let (a, b) = (rng.below(300), rng.below(300));
                     format!("\"{}\" {}", rng.text(a, TEXT), rng.text(b, JUNK))
+                }
+                // A conflict's entity: a node named by its path.
+                5 => {
+                    let n = rng.below(5000);
+                    format!("node {}", rng.text(n, NAME))
+                }
+                // A parent path of many long segments.
+                6 => {
+                    let depth = 1 + rng.below(12);
+                    let path: Vec<String> = (0..depth)
+                        .map(|_| {
+                            let len = 1 + rng.below(500);
+                            rng.text(len, NAME)
+                        })
+                        .collect();
+                    format!("node {}", path.join("/"))
+                }
+                // A property key, and the detail line it makes.
+                _ => {
+                    let n = 1 + rng.below(5000);
+                    format!("{} changed differently on both sides", rng.text(n, NAME))
                 }
             };
             let out = shown(&value);
@@ -200,8 +231,10 @@ mod tests {
             let flat = value.split_whitespace().collect::<Vec<_>>().join(" ");
             if count(&flat) <= MAX_SHOWN {
                 assert_eq!(out, flat, "case {case}");
+            } else {
+                assert!(out.ends_with("chars elided)"), "case {case}: {out}");
             }
-            if case % 5 == 2 {
+            if case % 8 == 2 {
                 assert_eq!(out, flat, "an id is never cut: case {case}");
             }
         }

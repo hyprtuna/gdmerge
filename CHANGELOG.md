@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Reports are bounded through their names as well as their values. 0.3.5 bounded every rendered
+  value and printed identities whole, so a conflict on a node with a 4,000-character name gave an
+  8,063-character stderr line and a 32,629-byte table, the same class of failure reached through a
+  node name, a parent path or a property key instead of a property. Every identity a report or a
+  diff prints now goes through the same rule as a value, and the seeded property test covers long
+  node names, parent paths and property keys alongside long values.
+
 ## [0.3.5] - 2026-08-29
 
 ### Changed

@@ -596,6 +596,79 @@ fn a_small_conflict_beside_a_huge_property_stays_bounded() {
     assert!(row.contains("y_sort_origin"), "{row}");
 }
 
+/// The same class of failure reached through names instead of values: a node
+/// name, a parent path or a property key is text the file may make as long as
+/// it likes. 0.3.5 bounded every value and printed identities whole, so a
+/// 4,000-character node name gave an 8,063-character stderr line and a
+/// 32,629-byte table.
+fn long_name_scene(y_sort_origin: &str, key: &str, value: &str) -> String {
+    let name = "N".repeat(4000);
+    format!(
+        "[gd_scene format=3 uid=\"uid://longname\"]\n\n\
+         [node name=\"Exploration\" type=\"Node2D\"]\n\n\
+         [node name=\"{name}\" type=\"TileMapLayer\" parent=\".\"]\n\
+         y_sort_origin = {y_sort_origin}\n\n\
+         [node name=\"Child\" type=\"Node2D\" parent=\"{name}\"]\n\
+         {key} = {value}\n"
+    )
+}
+
+#[test]
+fn reports_stay_bounded_on_long_names_paths_and_keys() {
+    let s = Scratch::new("bounded-names");
+    let key = "k".repeat(4000);
+    let b = s.write("base.tscn", &long_name_scene("0", &key, "0"));
+    let o = s.write("ours.tscn", &long_name_scene("4", &key, "4"));
+    let t = s.write("theirs.tscn", &long_name_scene("8", &key, "8"));
+    let m = s.write("merged.tscn", "");
+
+    let out = merge_to_stdout(&b, &o, &t);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    for line in err.lines() {
+        assert!(
+            line.chars().count() <= 3 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    assert!(err.contains("gdmerge: conflict in node NNNN"), "{err}");
+    assert!(err.contains("chars elided)"), "{err}");
+    assert!(err.contains("y_sort_origin: ours 4 / theirs 8"), "{err}");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    for line in text.lines() {
+        assert!(
+            line.chars().count() <= 4 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    assert!(text.contains("Conflict 1 of 2: node NNNN"), "{text}");
+    assert!(text.contains("Conflict 2 of 2: node NNNN"), "the child's path is bounded too: {text}");
+
+    let out = gdmerge(&["diff", b.to_str().unwrap(), o.to_str().unwrap()]);
+    assert!(out.status.success());
+    let text = stdout(&out);
+    for line in text.lines() {
+        assert!(
+            line.chars().count() <= 3 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    assert!(text.contains("~ node NNNN"), "{text}");
+    assert!(text.contains("kkkk"), "{text}");
+}
+
 // ---------------------------------------------------------------------------
 // The real thing: a git merge that only succeeds because the driver is active.
 // ---------------------------------------------------------------------------
