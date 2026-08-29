@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::scene::{EntityId, Scene};
+use crate::scene::{EntityId, Scene, AT, SEP};
 
 /// Which of the three inputs a lookup refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -209,6 +209,14 @@ impl Alignment {
                 method.clone(),
             ),
             EntityId::Editable(p) => EntityId::Editable(self.path(which, p)),
+            // A sub-resource keyed by where it is used carries a node path, and
+            // that path has to move with the node like any other.
+            EntityId::Sub(key) => match key.strip_prefix(AT).and_then(|r| r.split_once(SEP)) {
+                Some((path, rest)) => {
+                    EntityId::Sub(format!("{AT}{}{SEP}{rest}", self.path(which, path)))
+                }
+                None => id.clone(),
+            },
             other => other.clone(),
         }
     }

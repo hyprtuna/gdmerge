@@ -63,6 +63,12 @@ impl EntityId {
 /// A sub-resource key is its whole canonical content, which is unreadable. Show
 /// the resource type plus a short digest so two of the same type stay distinct.
 fn short(key: &str) -> String {
+    if let Some(rest) = key.strip_prefix(AT) {
+        let (path, property) = rest.split_once(SEP).unwrap_or((rest, "?"));
+        let node =
+            if path == "." { "the root node".to_string() } else { format!("node \"{path}\"") };
+        return format!("for {property} on {node}");
+    }
     let ty = key
         .split("#type=")
         .nth(1)
@@ -199,13 +205,77 @@ fn build_ext_keys(doc: &Document) -> HashMap<String, String> {
     map
 }
 
-/// Content-keys every sub-resource. Sub-resources may reference each other, so
-/// keys are resolved by fixed point: each pass keys the sub-resources whose
-/// dependencies are already known, and any residual cycle falls back to a key
-/// built from the id itself.
+/// Where a sub-resource is used from, which is what identifies it.
+///
+/// Content alone is a poor identity: two branches that edit the same
+/// sub-resource give it different content and it stops looking like one thing,
+/// so it ends up duplicated instead of merged. The place it is used from does
+/// not change when its contents do, which is exactly the property an identity
+/// needs.
+enum Referrer {
+    Node { path: String, property: String },
+    Sub { id: String, property: String },
+}
+
+/// Marks a key as derived from where the sub-resource is used rather than from
+/// its contents, so a rename can rewrite the node path inside it.
+pub const AT: char = '@';
+/// Separates the parts of a use-site key.
+pub const SEP: char = '\u{1}';
+
+/// The single place each sub-resource is used from, where there is exactly one.
+///
+/// More than one use, or none, means the site cannot identify it and its
+/// contents have to.
+fn sole_referrers(doc: &Document) -> HashMap<String, Referrer> {
+    let mut found: HashMap<String, Vec<Referrer>> = HashMap::new();
+    let mut note = |id: &str, referrer: Referrer| {
+        found.entry(id.to_string()).or_default().push(referrer);
+    };
+    for section in &doc.sections {
+        let owner = match section.kind {
+            SectionKind::Node => Some(node_path(section)),
+            SectionKind::SubResource => section.field_str("id").map(str::to_string),
+            _ => None,
+        };
+        let Some(owner) = owner else { continue };
+        let is_node = section.kind == SectionKind::Node;
+        for (property, refs) in section
+            .props
+            .iter()
+            .map(|p| (p.key.clone(), &p.refs))
+            .chain(section.fields.iter().map(|f| (f.name.clone(), &f.refs)))
+        {
+            for r in refs.iter().filter(|r| r.kind == RefKind::Sub) {
+                note(
+                    &r.id,
+                    if is_node {
+                        Referrer::Node { path: owner.clone(), property: property.clone() }
+                    } else {
+                        Referrer::Sub { id: owner.clone(), property: property.clone() }
+                    },
+                );
+            }
+        }
+    }
+    found
+        .into_iter()
+        .filter(|(_, uses)| uses.len() == 1)
+        .map(|(id, mut uses)| (id, uses.pop().expect("exactly one")))
+        .collect()
+}
+
+/// Keys every sub-resource, by where it is used when that is unambiguous and by
+/// its contents otherwise.
+///
+/// Both are resolved by fixed point, since sub-resources reference each other:
+/// each pass keys the ones whose dependencies are already known. Anything left
+/// over is part of a reference cycle.
 fn build_sub_keys(doc: &Document, ext_key: &HashMap<String, String>) -> HashMap<String, String> {
     let subs: Vec<&Section> = doc.sections_of(SectionKind::SubResource).collect();
+    let referrers = sole_referrers(doc);
     let mut keys: HashMap<String, String> = HashMap::new();
+
     for _ in 0..subs.len() + 1 {
         let mut changed = false;
         for s in &subs {
@@ -213,14 +283,27 @@ fn build_sub_keys(doc: &Document, ext_key: &HashMap<String, String>) -> HashMap<
             if keys.contains_key(id) {
                 continue;
             }
-            let deps_ready = s
-                .refs()
-                .filter(|r| r.kind == RefKind::Sub)
-                .all(|r| r.id == id || keys.contains_key(&r.id));
-            if !deps_ready {
-                continue;
-            }
-            let key = canonical_section(s, ext_key, &keys);
+            let key = match referrers.get(id) {
+                Some(Referrer::Node { path, property }) => {
+                    format!("{AT}{path}{SEP}{property}")
+                }
+                Some(Referrer::Sub { id: owner, property }) => match keys.get(owner) {
+                    Some(owner_key) => format!("{owner_key}{SEP}{property}"),
+                    // The owner is not keyed yet; come back to it.
+                    None if owner != id => continue,
+                    None => canonical_section(s, ext_key, &keys),
+                },
+                None => {
+                    let deps_ready = s
+                        .refs()
+                        .filter(|r| r.kind == RefKind::Sub)
+                        .all(|r| r.id == id || keys.contains_key(&r.id));
+                    if !deps_ready {
+                        continue;
+                    }
+                    canonical_section(s, ext_key, &keys)
+                }
+            };
             keys.insert(id.to_string(), key);
             changed = true;
         }
@@ -228,14 +311,15 @@ fn build_sub_keys(doc: &Document, ext_key: &HashMap<String, String>) -> HashMap<
             break;
         }
     }
-    // Anything left is part of a reference cycle.
     for s in &subs {
         if let Some(id) = s.field_str("id") {
             keys.entry(id.to_string()).or_insert_with(|| format!("cycle:{id}"));
         }
     }
-    // Distinct sub-resources can legitimately have identical content; keep them
-    // apart by suffixing repeats in declaration order.
+
+    // Two sub-resources can legitimately land on the same key: identical
+    // contents used from two places that are themselves not distinguishable.
+    // Suffix the repeats in declaration order so they stay separate entities.
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut out = HashMap::new();
     for s in &subs {

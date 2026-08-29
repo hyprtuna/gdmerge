@@ -1,1 +1,1 @@
-node G
+sub_resource for gradient on node "G"

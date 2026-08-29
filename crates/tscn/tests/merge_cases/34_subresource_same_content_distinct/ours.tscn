@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://subsame"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_a"]
+radius = 24.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_b"]
+radius = 16.0
+
+[node name="Root" type="Node2D"]
+
+[node name="Left" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_a")
+
+[node name="Right" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_b")
