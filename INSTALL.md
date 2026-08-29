@@ -116,13 +116,34 @@ $ gdmerge check some/scene.tscn
 
 ## Using it without installing the driver
 
-Every command works standalone, which is handy in CI or a pre-commit hook:
+Every command works standalone, which is handy in CI:
 
 ```console
 $ gdmerge check $(git ls-files '*.tscn' '*.tres')
 $ gdmerge diff old.tscn new.tscn
 $ gdmerge merge --base ancestor.tscn --ours mine.tscn --theirs yours.tscn -O merged.tscn
 ```
+
+## As a pre-commit hook
+
+If you use [pre-commit](https://pre-commit.com), add this to your project's
+`.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/hyprtuna/gdmerge
+    rev: v0.3.0
+    hooks:
+      - id: gdmerge-check
+```
+
+Every changed `.tscn` and `.tres` is then checked before it is committed, which catches a dangling
+resource reference or a node path naming something that is not there at the point it is introduced,
+rather than when somebody opens the scene and wonders why nothing moves.
+
+The hook runs the `gdmerge` already on your `PATH`; it does not build one. If you have run
+`gdmerge git-install` you already have it. Otherwise install it as above first, or the hook will
+report that the executable was not found.
 
 ## Troubleshooting
 
