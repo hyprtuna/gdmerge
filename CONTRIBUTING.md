@@ -12,7 +12,7 @@ $ cargo build
 $ cargo test
 ```
 
-Rust 1.74 or newer. `git` must be on `PATH`: part of the suite drives a real `git merge` through the
+Rust 1.85 or newer. `git` must be on `PATH`: part of the suite drives a real `git merge` through the
 installed driver.
 
 Before pushing, run what CI runs:

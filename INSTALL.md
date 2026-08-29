@@ -38,7 +38,7 @@ $ cargo build --release
 $ install -m755 target/release/gdmerge ~/.local/bin/gdmerge
 ```
 
-Requires Rust 1.74 or newer. `cargo test` runs the full suite, including a real `git merge` through
+Requires Rust 1.85 or newer for the tool. The `tscn` library alone builds on 1.74. `cargo test` runs the full suite, including a real `git merge` through
 the installed driver, so `git` needs to be on `PATH`.
 
 ## 2. Register the merge driver
