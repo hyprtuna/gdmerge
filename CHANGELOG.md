@@ -16,6 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   different names on the two branches is reported as a conflict, with the reason named.
 - `Conflict` now carries the header field or property that could not be reconciled, in a new `key`
   field, and its `detail` names it.
+- `gdmerge mergetool`, a new subcommand that redoes a conflicted merge and prints the conflicting
+  node one property per row, with the base, ours and theirs values side by side and the rows that
+  actually disagree marked. `gdmerge git-install` registers it as a git mergetool, so
+  `git mergetool --tool=gdmerge` works after the usual one command setup.
+- The merge driver now names the items that disagreed on stderr instead of only saying which entity
+  conflicted.
+- `Conflict` carries a `rows` field with every item of the entity as each of the three sides has it,
+  which is what both of those renderings are built from.
 
 ### Fixed
 

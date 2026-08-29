@@ -12,7 +12,7 @@ text{opacity:0;animation:r .01s linear forwards}@keyframes r{to{opacity:1}}
 <text class="w" x="20" y="150" style="animation-delay:1.40s" xml:space="preserve">  8:=======</text>
 <text class="w" x="20" y="172" style="animation-delay:1.75s" xml:space="preserve">  10:&gt;&gt;&gt;&gt;&gt;&gt;&gt; audio</text>
 <text class="p" x="20" y="194" style="animation-delay:2.10s" xml:space="preserve">$ gdmerge git-install</text>
-<text class="o" x="20" y="216" style="animation-delay:2.45s" xml:space="preserve">  configured the 'gdmerge' merge driver in /home/you/game/.git/config</text>
+<text class="o" x="20" y="216" style="animation-delay:2.45s" xml:space="preserve">  configured the 'gdmerge' merge driver and mergetool in /home/you/game/.git/config</text>
 <text class="o" x="20" y="238" style="animation-delay:2.80s" xml:space="preserve">  added *.tscn and *.tres rules to /home/you/game/.gitattributes</text>
 <text class="p" x="20" y="260" style="animation-delay:3.15s" xml:space="preserve">$ git merge audio</text>
 <text class="o" x="20" y="282" style="animation-delay:3.50s" xml:space="preserve">  Auto-merging level.tscn</text>

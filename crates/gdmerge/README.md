@@ -27,6 +27,7 @@ for `*.tscn` and `*.tres`. Commit the `.gitattributes` it writes; each teammate 
 | --- | --- |
 | `gdmerge merge --base O --ours A --theirs B` | Three-way merge. Exit `0` clean, `1` with conflicts. Also accepts git's `%O %A %B %L %P` argument order. |
 | `gdmerge diff A B` | Semantic diff: nodes, resources and connections added, removed, moved or changed. `--json` available. |
+| `gdmerge mergetool B O T OUT` | Redo a merge and print the two sides property by property. What `git mergetool --tool=gdmerge` runs. |
 | `gdmerge check FILE...` | Parse, prove a byte-exact round trip, and validate structurally. Useful as a pre-commit hook. |
 | `gdmerge git-install [--global]` | Register the merge driver and the `.gitattributes` entries. |
 

@@ -31,12 +31,24 @@ $ cargo test --all-features --workspace
 | `crates/gdmerge` | The command-line tool: argument handling, file I/O, git configuration, text fallback. |
 | `crates/tscn/tests/fixtures` | Real scene files from godotengine/godot-demo-projects. |
 | `crates/tscn/tests/merge_cases` | Golden three-way merge cases. |
-| `docs/demo.sh` | The README's example, runnable, plus the renderer for `docs/demo.svg`. |
+| `docs/demo.sh` | The README's two examples, runnable, plus the renderer for `docs/demo.svg` and `docs/conflict.svg`. |
 
 The design that everything else rests on: **parsing keeps every byte**. A value is stored as its
 exact source text plus the byte ranges of the resource ids inside it, so serialising an unmodified
 document reproduces the input exactly, and rewriting an id is a splice rather than a re-render. The
 parsed value tree is used for *comparison only*, never for output.
+
+## The README's demos
+
+`docs/demo.svg` and `docs/conflict.svg` are rendered from real runs, not drawn by hand. If you
+change anything they show, regenerate them in the same commit:
+
+```console
+$ ./docs/demo.sh clean --svg docs/demo.svg
+$ ./docs/demo.sh conflict --svg docs/conflict.svg
+```
+
+Run `./docs/demo.sh` or `./docs/demo.sh conflict` with no `--svg` to see the transcript first.
 
 ## Adding a fixture
 
