@@ -96,6 +96,20 @@ fn check_accepts_a_valid_file() {
     assert!(stdout(&out).contains("1 file checked, 0 failed"));
 }
 
+/// INSTALL's CI snippet is `gdmerge check $(git ls-files '*.tscn' '*.tres')`,
+/// which expands to no arguments at all in a repository that has no scene
+/// files yet. That is not a failure.
+#[test]
+fn check_with_no_files_checks_nothing_and_succeeds() {
+    let out = gdmerge(&["check"]);
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(stdout(&out).contains("0 files checked, 0 failed"), "{}", stdout(&out));
+
+    let out = gdmerge(&["check", "--json"]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(stdout(&out).trim(), "[]");
+}
+
 #[test]
 fn check_rejects_a_dangling_reference() {
     let s = Scratch::new("check-dangling");

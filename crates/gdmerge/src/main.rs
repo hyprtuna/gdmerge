@@ -110,8 +110,8 @@ struct MergetoolArgs {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// Files to validate.
-    #[arg(required = true)]
+    /// Files to validate. None is fine: a repository with no scene files
+    /// yet has nothing wrong with it.
     files: Vec<std::path::PathBuf>,
     /// Emit machine-readable JSON.
     #[arg(long)]
