@@ -1,13 +1,13 @@
 //! Structural sanity checks: the same invariants Godot's loader relies on.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use serde::Serialize;
 
 use crate::doc::{Document, SectionKind};
 use crate::nodepath::{findings, Resolution};
 use crate::scene::node_path;
-use crate::value::{id_text, is_legacy_id, RefKind};
+use crate::value::{id_text, is_legacy_id, RefKind, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -240,19 +240,33 @@ fn check_nodes(doc: &Document, r: &mut CheckReport) {
         ));
     }
 
-    let mut index_dupes: HashMap<(&str, i64), usize> = HashMap::new();
+    let mut index_dupes: BTreeMap<(&str, i64), usize> = BTreeMap::new();
     for s in &nodes {
         let (Some(parent), Some(index)) =
-            (s.field_str("parent"), s.field("index").and_then(|f| f.value.as_num()))
+            (s.field_str("parent"), s.field("index").and_then(|f| sibling_index(&f.value)))
         else {
             continue;
         };
-        *index_dupes.entry((parent, index as i64)).or_insert(0) += 1;
+        *index_dupes.entry((parent, index)).or_insert(0) += 1;
     }
     for ((parent, index), n) in index_dupes {
         if n > 1 {
             r.error(format!("{n} children of \"{parent}\" share index {index}"));
         }
+    }
+}
+
+/// The value of a node's `index` field, whichever way it is spelled.
+///
+/// Godot writes it quoted (`index="0"`), as it does every header field it
+/// reads back through a string, and its loader converts the text to a number.
+/// The bare form (`index=0`) is accepted too, since the loader takes it just
+/// the same, which means the two spellings of one number name the same slot.
+fn sibling_index(value: &Value) -> Option<i64> {
+    match value {
+        Value::Num(n) => Some(*n as i64),
+        Value::Str(s) => s.trim().parse().ok(),
+        _ => None,
     }
 }
 
