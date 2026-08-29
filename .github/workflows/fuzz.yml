@@ -52,7 +52,12 @@ jobs:
           if [ "${{ matrix.target }}" != "value" ]; then
             extra="crates/tscn/tests/fixtures"
           fi
-          cargo fuzz run "${{ matrix.target }}" \
+          # cargo-fuzz defaults to the triple it was itself built for. The
+          # binary installed here is musl linked, and a sanitizer cannot be used
+          # with a statically linked libc, so the host triple is passed
+          # explicitly rather than inferred.
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          cargo fuzz run --target "$host" "${{ matrix.target }}" \
             "fuzz/corpus/${{ matrix.target }}" \
             "fuzz/seeds/${{ matrix.target }}" \
             $extra \
