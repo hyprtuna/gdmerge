@@ -26,15 +26,32 @@ esac
 cargo build --release --quiet --manifest-path "$repo_root/Cargo.toml"
 export PATH="$repo_root/target/release:$PATH"
 
-demo=$work/demo
-mkdir -p "$demo"
-cd "$demo"
-export GIT_CONFIG_NOSYSTEM=1
+# Nothing from the machine running this may reach the transcript: no global
+# git config (a merge.conflictstyle there changes the markers git writes), no
+# attributes file, no home directory of the author's.
+export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=$work/home/.gitconfig
 export GIT_AUTHOR_NAME=Demo GIT_AUTHOR_EMAIL=demo@example.invalid
 export GIT_COMMITTER_NAME=Demo GIT_COMMITTER_EMAIL=demo@example.invalid
-git init -q -b main .
-git config user.name Demo
-git config user.email demo@example.invalid
+mkdir -p "$HOME"
+
+# Runs the scenario in a fresh repository under $1, writing the transcript to $2.
+record() {
+	local demo=$1
+	transcript=$2
+	mkdir -p "$demo"
+	cd "$demo"
+	git init -q -b main .
+	git config user.name Demo
+	git config user.email demo@example.invalid
+	case $scenario in
+	clean) demo_clean ;;
+	conflict) demo_conflict ;;
+	esac
+	# The scratch repository lives in a temporary directory; show a stable
+	# path instead so the transcript reads the same wherever it is run.
+	sed -i "s#$demo#/home/you/game#g" "$transcript"
+}
 
 say() { printf '$ %s\n' "$1" >>"$transcript"; }
 out() { sed 's/^/  /' >>"$transcript"; }
@@ -126,14 +143,16 @@ demo_conflict() {
 		sed -n '/{remote}/,$p' | tail -n +2 | head -14 | out || true
 }
 
-case $scenario in
-clean) demo_clean ;;
-conflict) demo_conflict ;;
-esac
-
-# The scratch repository lives in a temporary directory; show a stable path
-# instead so the transcript reads the same wherever it is run.
-sed -i "s#$demo#/home/you/game#g" "$transcript"
+# Twice, and the two runs have to agree: a transcript that depends on anything
+# but the tool is not one to publish.
+record "$work/first" "$work/first.transcript"
+record "$work/second" "$work/second.transcript"
+if ! cmp -s "$work/first.transcript" "$work/second.transcript"; then
+	echo "demo.sh: the transcript is not reproducible:" >&2
+	diff "$work/first.transcript" "$work/second.transcript" >&2 || true
+	exit 1
+fi
+transcript=$work/first.transcript
 
 cat "$transcript"
 
