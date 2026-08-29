@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-29
+
+The crates are byte for byte identical to 0.3.0. This release exists so the pre-commit hook has
+a tag to pin: pre-commit reads `.pre-commit-hooks.yaml` from the revision you name, and that file
+did not exist at `v0.3.0`.
+
 ### Added
 
 - A [pre-commit](https://pre-commit.com) hook, `gdmerge-check`, so changed `.tscn` and `.tres` files
@@ -136,7 +142,8 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.1
 [0.3.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.0
 [0.2.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.0
