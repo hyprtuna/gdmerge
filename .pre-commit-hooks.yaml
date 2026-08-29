@@ -21,7 +21,8 @@
     byte for byte, and validate its structure. The commit is blocked by
     anything Godot would refuse to load or would load wrongly: dangling
     resource references, duplicate ids, orphaned nodes, a missing or repeated
-    root, and node paths that name nothing. A stale load_steps, and a node path
+    root, colliding sibling indices, and node paths that name nothing. A stale
+    load_steps, and a node path
     that cannot be judged from one file, are reported as warnings and do not
     block the commit.
   entry: gdmerge check

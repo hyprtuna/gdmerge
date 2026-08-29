@@ -106,6 +106,22 @@ fn check_rejects_a_dangling_reference() {
     assert!(stdout(&out).contains("dangling ExtResource(\"9_missing\")"), "{}", stdout(&out));
 }
 
+/// The README and the pre-commit hook say a colliding sibling index stops a
+/// commit. Godot writes the index quoted, so that is the form which has to fail.
+#[test]
+fn check_fails_on_colliding_quoted_sibling_indices() {
+    let s = Scratch::new("check-index");
+    let f = s.write(
+        "index.tscn",
+        "[gd_scene format=3]\n\n[node name=\"Root\" type=\"Node2D\"]\n\n\
+         [node name=\"A\" type=\"Node\" parent=\".\" index=\"0\"]\n\n\
+         [node name=\"B\" type=\"Node\" parent=\".\" index=\"0\"]\n",
+    );
+    let out = gdmerge(&["check", f.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    assert!(stdout(&out).contains("2 children of \".\" share index 0"), "{}", stdout(&out));
+}
+
 #[test]
 fn check_reports_a_parse_error_with_a_line_number() {
     let s = Scratch::new("check-parse");

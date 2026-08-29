@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `gdmerge check` now catches two siblings that share an `index`. The rule only read the bare
+  spelling (`index=0`), and Godot writes the field quoted (`index="0"`), so the collision it was
+  meant to report never was: a file with two `parent="." index="0"` nodes passed `check`, and the
+  pre-commit hook let it through. Both spellings are read now, and a quoted and a bare index that
+  name the same slot collide with each other, as they do in Godot's loader. This makes the README's
+  list of what `check` fails on true of colliding sibling indices, which it was not.
+
 ## [0.3.2] - 2026-08-29
 
 ### Changed
