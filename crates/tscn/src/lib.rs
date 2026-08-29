@@ -27,6 +27,6 @@ pub use check::{check, CheckIssue, CheckReport, Severity};
 pub use diff::{diff, Change, Diff, PropertyChange};
 pub use doc::{Document, Field, Property, Section, SectionKind};
 pub use error::{ParseError, ParseErrorKind};
-pub use merge::{merge, Conflict, MergeOptions, MergeOutcome};
+pub use merge::{merge, Conflict, ConflictRow, MergeOptions, MergeOutcome};
 pub use scene::{node_path, EntityId, Scene};
 pub use value::{RefKind, Value, ValueRef};
