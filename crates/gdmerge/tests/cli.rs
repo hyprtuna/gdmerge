@@ -546,6 +546,83 @@ fn git_merge_succeeds_through_the_installed_driver() {
     assert!(!tool.status.success(), "the mergetool config should be gone");
 }
 
+/// Runs gdmerge against a scratch user account: its own `HOME`, so the global
+/// git config and the default attributes file land in the scratch directory.
+fn gdmerge_as_user(home: &Path, args: &[&str]) -> Output {
+    Command::new(BIN)
+        .args(args)
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("XDG_CONFIG_HOME", home.join("xdg"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env_remove("GIT_CONFIG_GLOBAL")
+        .output()
+        .expect("running gdmerge")
+}
+
+/// A global git config value as that scratch user sees it.
+fn global_config(home: &Path, key: &str) -> Option<String> {
+    let out = Command::new("git")
+        .args(["config", "--global", "--get", key])
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env_remove("GIT_CONFIG_GLOBAL")
+        .output()
+        .expect("running git");
+    out.status.success().then(|| stdout(&out).trim().to_string())
+}
+
+/// `git-install --global` registers a default attributes file and creates it;
+/// `git-uninstall --global` has to take both away again, or the account is not
+/// back the way it was.
+#[test]
+fn git_uninstall_global_removes_what_git_install_global_created() {
+    let s = Scratch::new("global-uninstall");
+    let home = s.path();
+    let attributes = home.join("xdg").join("git").join("attributes");
+
+    let out = gdmerge_as_user(home, &["git-install", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(global_config(home, "merge.gdmerge.driver").is_some());
+    let registered = global_config(home, "core.attributesfile").expect("core.attributesfile set");
+    assert_eq!(Path::new(&registered), attributes, "{registered}");
+    let written = std::fs::read_to_string(&attributes).expect("attributes file created");
+    assert!(written.contains("*.tscn merge=gdmerge"), "{written}");
+
+    let out = gdmerge_as_user(home, &["git-uninstall", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(global_config(home, "merge.gdmerge.driver").is_none());
+    assert!(global_config(home, "mergetool.gdmerge.cmd").is_none());
+    assert!(global_config(home, "core.attributesfile").is_none(), "core.attributesfile left set");
+    assert!(!attributes.exists(), "the emptied attributes file was left behind");
+    assert!(stdout(&out).contains("unset core.attributesfile"), "{}", stdout(&out));
+}
+
+/// Rules somebody else added to the attributes file are not gdmerge's to
+/// remove, so the file and the setting naming it stay, and the output says so.
+#[test]
+fn git_uninstall_global_keeps_an_attributes_file_with_other_rules() {
+    let s = Scratch::new("global-uninstall-shared");
+    let home = s.path();
+    let attributes = home.join("xdg").join("git").join("attributes");
+
+    let out = gdmerge_as_user(home, &["git-install", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let mut written = std::fs::read_to_string(&attributes).expect("attributes file created");
+    written.push_str("*.png binary\n");
+    std::fs::write(&attributes, written).unwrap();
+
+    let out = gdmerge_as_user(home, &["git-uninstall", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(global_config(home, "merge.gdmerge.driver").is_none());
+    let remaining = std::fs::read_to_string(&attributes).expect("the file has to stay");
+    assert_eq!(remaining, "*.png binary\n");
+    assert!(global_config(home, "core.attributesfile").is_some(), "the setting has to stay");
+    assert!(stdout(&out).contains("left the file in place"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("core.attributesfile still names it"), "{}", stdout(&out));
+}
+
 /// A conflict the driver cannot resolve, handed to `git mergetool --tool=gdmerge`.
 #[test]
 fn git_mergetool_explains_a_real_conflict() {

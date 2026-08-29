@@ -64,11 +64,34 @@ pub fn uninstall(global: bool) -> Result<i32> {
     let scope = Scope::detect(global)?;
     let _ = git(&["config", scope.flag(), "--remove-section", &format!("merge.{DRIVER}")]);
     let _ = git(&["config", scope.flag(), "--remove-section", &format!("mergetool.{DRIVER}")]);
-    let attributes = scope.attributes_path()?;
-    let removed = remove_attributes(&attributes)?;
     println!("removed the '{DRIVER}' merge driver and mergetool from {}", scope.describe());
-    if removed {
-        println!("removed gdmerge rules from {}", attributes.display());
+
+    // Only a file that is actually configured is touched. Looking one up the
+    // way `install` does would register a default file on the way out.
+    let Some(attributes) = scope.configured_attributes_path()? else { return Ok(0) };
+    match remove_attributes(&attributes)? {
+        Removal::Nothing => {}
+        Removal::Kept => {
+            println!("removed gdmerge rules from {}", attributes.display());
+            println!("left the file in place: it has rules gdmerge did not write");
+            if matches!(scope, Scope::Global) {
+                println!("core.attributesfile still names it");
+            }
+        }
+        Removal::Emptied => {
+            println!("removed {}, which held nothing but gdmerge rules", attributes.display());
+            if matches!(scope, Scope::Global) {
+                if Some(&attributes) == default_global_attributes().ok().as_ref() {
+                    git(&["config", "--global", "--unset", "core.attributesfile"])?;
+                    println!("unset core.attributesfile, which named it");
+                } else {
+                    println!(
+                        "left core.attributesfile set: it names a file gdmerge git-install did not \
+                         register"
+                    );
+                }
+            }
+        }
     }
     Ok(0)
 }
@@ -102,26 +125,47 @@ impl Scope {
         }
     }
 
+    /// The attributes file `install` writes to. For the user account this
+    /// registers git's default location as `core.attributesfile` when nothing
+    /// is configured yet.
     fn attributes_path(&self) -> Result<PathBuf> {
         match self {
             Scope::Repo(root) => Ok(root.join(".gitattributes")),
             Scope::Global => {
-                if let Ok(p) = git(&["config", "--global", "core.attributesfile"]) {
-                    let p = p.trim();
-                    if !p.is_empty() {
-                        return Ok(PathBuf::from(shellexpand_home(p)));
-                    }
+                if let Some(path) = configured_global_attributes() {
+                    return Ok(path);
                 }
-                let base = std::env::var_os("XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .or_else(|| home().map(|h| h.join(".config")))
-                    .context("cannot locate a config directory for the global attributes file")?;
-                let path = base.join("git").join("attributes");
+                let path = default_global_attributes()?;
                 git(&["config", "--global", "core.attributesfile", &path.to_string_lossy()])?;
                 Ok(path)
             }
         }
     }
+
+    /// The attributes file as configured right now, registering nothing.
+    fn configured_attributes_path(&self) -> Result<Option<PathBuf>> {
+        match self {
+            Scope::Repo(root) => Ok(Some(root.join(".gitattributes"))),
+            Scope::Global => Ok(configured_global_attributes()),
+        }
+    }
+}
+
+/// `core.attributesfile` from the global config, if set.
+fn configured_global_attributes() -> Option<PathBuf> {
+    let p = git(&["config", "--global", "core.attributesfile"]).ok()?;
+    let p = p.trim();
+    (!p.is_empty()).then(|| PathBuf::from(shellexpand_home(p)))
+}
+
+/// Where git looks for the user's attributes when `core.attributesfile` is
+/// not set, which is the only file `install --global` ever registers.
+fn default_global_attributes() -> Result<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home().map(|h| h.join(".config")))
+        .context("cannot locate a config directory for the global attributes file")?;
+    Ok(base.join("git").join("attributes"))
 }
 
 fn home() -> Option<PathBuf> {
@@ -180,20 +224,36 @@ fn add_attributes(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-/// Removes the lines `add_attributes` wrote and nothing else.
-fn remove_attributes(path: &Path) -> Result<bool> {
-    let Ok(existing) = std::fs::read_to_string(path) else { return Ok(false) };
+/// What `remove_attributes` did to the file.
+enum Removal {
+    /// The file is missing or has no gdmerge lines in it.
+    Nothing,
+    /// gdmerge's lines are gone and the rest of the file is as it was.
+    Kept,
+    /// Nothing but gdmerge's lines was in the file, so it is gone too.
+    Emptied,
+}
+
+/// Removes the lines `add_attributes` wrote and nothing else. A file that held
+/// nothing else is deleted rather than left empty, which is what putting it
+/// back the way it was means when `add_attributes` created it.
+fn remove_attributes(path: &Path) -> Result<Removal> {
+    let Ok(existing) = std::fs::read_to_string(path) else { return Ok(Removal::Nothing) };
     let drop: Vec<String> = PATTERNS.iter().map(|p| format!("{p} merge={DRIVER}")).collect();
     let kept: Vec<&str> = existing
         .lines()
         .filter(|l| l.trim() != MARKER && !drop.iter().any(|d| d == l.trim()))
         .collect();
     if kept.len() == existing.lines().count() {
-        return Ok(false);
+        return Ok(Removal::Nothing);
     }
-    let mut out = kept.join("\n");
-    let out_trimmed = out.trim_end_matches('\n');
-    out = if out_trimmed.is_empty() { String::new() } else { format!("{out_trimmed}\n") };
-    std::fs::write(path, out).with_context(|| format!("writing {}", path.display()))?;
-    Ok(true)
+    let out = kept.join("\n");
+    let out = out.trim_end_matches('\n');
+    if out.trim().is_empty() {
+        std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
+        return Ok(Removal::Emptied);
+    }
+    std::fs::write(path, format!("{out}\n"))
+        .with_context(|| format!("writing {}", path.display()))?;
+    Ok(Removal::Kept)
 }
