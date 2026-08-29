@@ -18,8 +18,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   correction. The test guarding the old claim called the library directly, which does still pass
   an inherited break through; it now exercises the command and asserts the fallback. Running
   `gdmerge check` on the file and fixing what it reports gets the semantic merge back for it.
+- The text fallback follows `merge.conflictstyle`. `git merge-file` was asked for `diff3` markers
+  whatever style the user had configured; it is now left to read the setting itself, which is what
+  the driver's missing-binary path and git's own merges already did. gdmerge's own markers are
+  always the two-sided form, and the README now says so; `gdmerge mergetool` is what shows the base
+  value of every property.
+- The README documents `check --json`, with a sample, next to `diff --json`.
 
 ### Fixed
+
+- `-O` can point at something that is not a regular file, such as `/dev/null` from a script that
+  only wants the exit status. The result is normally written to a temporary file beside the target
+  and renamed into place, which for `/dev/null` failed with a bare "Permission denied" from `/dev`.
+  Such a target is now written directly, and when the temporary file cannot be created the error
+  says that the directory beside the target has to be writable, and why.
 
 - The conflict report shows the ids the merged file has. A sub-resource used from more than one
   node and edited on both branches survives as two sub-resources, theirs under a new id, with a

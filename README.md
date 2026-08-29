@@ -114,6 +114,11 @@ would collide gets a new one.
 Conflict markers wrap the affected `[node]` or `[sub_resource]` section, not the whole file, so the
 rest of the scene stays readable and the part you need to look at is obvious.
 
+The markers are always the two-sided form, ours above theirs, whatever `merge.conflictstyle` is set
+to: gdmerge does not write a base section, and `git mergetool --tool=gdmerge` below shows the base
+value of every property instead. A merge gdmerge hands to `git merge-file` follows your
+`merge.conflictstyle`, like any merge git does itself.
+
 When a merge does conflict, the driver says what about, on stderr:
 
 ```console
@@ -201,6 +206,25 @@ $ gdmerge check level.tscn
 ok   level.tscn
 
 1 file checked, 0 failed
+```
+
+Add `--json` for a machine-readable form: one entry per file, `ok` false when the file has an
+error, and a `parse_error` string as well when it does not parse at all:
+
+```console
+$ gdmerge check --json broken.tscn
+[
+  {
+    "file": "broken.tscn",
+    "ok": false,
+    "issues": [
+      {
+        "severity": "error",
+        "message": "dangling ExtResource(\"9_missing\") reference"
+      }
+    ]
+  }
+]
 ```
 
 ```yaml
