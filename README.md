@@ -186,13 +186,22 @@ scene, or above the root, is reported as unverifiable rather than wrong. This is
 catches a scene wired to a node somebody renamed, which loads without complaint and then does
 nothing.
 
-It is useful on its own as a pre-commit hook:
+It is useful on its own, and ships a [pre-commit](https://pre-commit.com) hook so a broken scene
+never reaches a commit:
 
 ```console
 $ gdmerge check level.tscn
 ok   level.tscn
 
 1 file checked, 0 failed
+```
+
+```yaml
+repos:
+  - repo: https://github.com/hyprtuna/gdmerge
+    rev: v0.3.0
+    hooks:
+      - id: gdmerge-check
 ```
 
 ## Limitations

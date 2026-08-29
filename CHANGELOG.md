@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A [pre-commit](https://pre-commit.com) hook, `gdmerge-check`, so changed `.tscn` and `.tres` files
+  are validated before they are committed. It uses the `gdmerge` on your `PATH` rather than building
+  one, since anyone using the merge driver already has it.
+
 ## [0.3.0] - 2026-08-29
 
 ### Upgrading
