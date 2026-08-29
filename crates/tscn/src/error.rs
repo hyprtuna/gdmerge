@@ -16,6 +16,7 @@ pub enum ParseErrorKind {
     PropertyOutsideSection,
     NotAGodotTextResource,
     TrailingGarbage,
+    ValueTooDeep(usize),
 }
 
 impl fmt::Display for ParseErrorKind {
@@ -41,6 +42,9 @@ impl fmt::Display for ParseErrorKind {
                 write!(f, "file does not start with [gd_scene] or [gd_resource]")
             }
             ParseErrorKind::TrailingGarbage => write!(f, "unexpected trailing content"),
+            ParseErrorKind::ValueTooDeep(limit) => {
+                write!(f, "value nested more than {limit} levels deep")
+            }
         }
     }
 }

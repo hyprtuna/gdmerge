@@ -281,15 +281,25 @@ impl<'a> Lexer<'a> {
 
 /// One-token-lookahead cursor over a [`Lexer`], plus the byte bookkeeping the
 /// document parser needs to slice raw source text back out.
+/// How deeply values may nest before parsing gives up.
+///
+/// Nesting is parsed recursively, so without a limit a file with a few thousand
+/// opening brackets overflows the stack and aborts the process. Godot's own
+/// writer refuses to emit more than a hundred levels, and real scenes nest a
+/// handful, so this is far above anything legitimate while staying well inside
+/// the stack.
+pub(crate) const MAX_VALUE_DEPTH: usize = 128;
+
 pub struct Cursor<'a> {
     lex: Lexer<'a>,
     peeked: Option<Token>,
     last_end: usize,
+    depth: usize,
 }
 
 impl<'a> Cursor<'a> {
     pub fn new(src: &'a str) -> Self {
-        Cursor { lex: Lexer::new(src), peeked: None, last_end: 0 }
+        Cursor { lex: Lexer::new(src), peeked: None, last_end: 0, depth: 0 }
     }
 
     pub fn src(&self) -> &'a str {
@@ -348,6 +358,21 @@ impl<'a> Cursor<'a> {
         self.peeked = None;
         self.last_end = pos;
         self.lex.set_pos(pos);
+    }
+
+    /// Records entry into a nested value, refusing to go deeper than
+    /// [`MAX_VALUE_DEPTH`]. Every call must be paired with [`Cursor::leave`].
+    pub(crate) fn enter(&mut self) -> Result<(), ParseError> {
+        self.depth += 1;
+        if self.depth > MAX_VALUE_DEPTH {
+            let at = self.last_end;
+            return Err(self.error(at, ParseErrorKind::ValueTooDeep(MAX_VALUE_DEPTH)));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn leave(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     pub fn error(&self, at: usize, kind: ParseErrorKind) -> ParseError {

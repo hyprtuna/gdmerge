@@ -221,6 +221,19 @@ pub(crate) fn parse_value_from(
     tok: crate::lex::Token,
     refs: &mut Vec<ValueRef>,
 ) -> Result<Value, ParseError> {
+    // Every level of nesting funnels through here, so this is the one place the
+    // depth has to be counted.
+    cur.enter()?;
+    let value = parse_value_inner(cur, tok, refs);
+    cur.leave();
+    value
+}
+
+fn parse_value_inner(
+    cur: &mut Cursor<'_>,
+    tok: crate::lex::Token,
+    refs: &mut Vec<ValueRef>,
+) -> Result<Value, ParseError> {
     match tok.tok {
         Tok::Num(n) => Ok(Value::Num(n)),
         Tok::Color(c) => Ok(Value::Color(c)),
