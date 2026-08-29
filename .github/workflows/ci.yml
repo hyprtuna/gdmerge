@@ -48,9 +48,34 @@ jobs:
         shell: bash
         run: cargo test --all-features --workspace
 
+  # The rust-version each crate declares is a promise to consumers, so it is
+  # checked rather than assumed. Keep these pinned to the Cargo.toml values.
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.74, the tscn rust-version
+        uses: dtolnay/rust-toolchain@1.74.0
+
+      - name: Check tscn
+        shell: bash
+        run: cargo +1.74.0 check -p tscn --all-targets --locked
+
+      - name: Install Rust 1.85, the gdmerge rust-version
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Check gdmerge
+        shell: bash
+        run: cargo +1.85.0 check --workspace --all-targets --locked
+
   gate:
     name: gate
-    needs: [build]
+    needs: [build, msrv]
     if: always()
     runs-on: ubuntu-latest
     steps:
