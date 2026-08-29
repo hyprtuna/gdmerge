@@ -111,6 +111,38 @@ would collide gets a new one.
 Conflict markers wrap the affected `[node]` or `[sub_resource]` section, not the whole file, so the
 rest of the scene stays readable and the part you need to look at is obvious.
 
+When a merge does conflict, the driver says what about, on stderr:
+
+```console
+gdmerge: conflict in root node "Player" (speed changed differently on both sides)
+gdmerge:   speed: ours 250.0 / theirs 400.0
+gdmerge: run `git mergetool --tool=gdmerge` to see the two sides side by side
+```
+
+and `git mergetool --tool=gdmerge` lays the whole node out, one property per row:
+
+![A conflicting merge, then git mergetool showing the base, ours and theirs values of every property on the conflicting node](docs/conflict.svg)
+
+```console
+$ git mergetool --tool=gdmerge
+1 conflict in level.tscn
+
+Conflict 1 of 1: root node "Player"
+  speed changed differently on both sides
+
+     property  base               ours               theirs
+     --------  -----------------  -----------------  -----------------
+     name      "Player"           "Player"           "Player"
+     type      "CharacterBody2D"  "CharacterBody2D"  "CharacterBody2D"
+  >  speed     100.0              250.0              400.0
+
+Rows marked with > are the ones to resolve. Edit the file, remove the conflict
+markers, then stage it.
+```
+
+`gdmerge git-install` registers the mergetool along with the driver. To reach for it without
+typing `--tool` every time, `git config merge.tool gdmerge`.
+
 ## Safety
 
 - **Never loses data.** A merge that produces anything other than a clean, re-parseable file is
@@ -136,6 +168,10 @@ $ gdmerge diff base.tscn ours.tscn
 ```
 
 Add `--json` for a machine-readable form.
+
+`gdmerge mergetool` is what `git mergetool --tool=gdmerge` runs. It redoes the merge from the three
+pristine versions git hands it, writes the result, and prints the table above. It also works
+directly: `gdmerge mergetool base.tscn ours.tscn theirs.tscn out.tscn`.
 
 `gdmerge check` parses a file, proves it round-trips byte for byte, and validates it structurally:
 dangling `ExtResource`/`SubResource` references, duplicate ids, duplicate or orphaned node paths,
