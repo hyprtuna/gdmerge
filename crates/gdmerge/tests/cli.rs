@@ -730,6 +730,43 @@ fn merging_legacy_input_introduces_no_new_breakage() {
     }
 }
 
+/// A reference that was already broken in the common ancestor is not the
+/// merge's doing, and the library passes it through. The command does not get
+/// that far: every input has to pass `check` first, a `NodePath` naming nothing
+/// fails it, and so the whole merge goes to git's text merge with git's exit
+/// status. The 0.3.0 notes claimed otherwise; this pins what ships.
+#[test]
+fn a_pre_existing_broken_reference_hands_the_merge_to_git() {
+    let s = Scratch::new("inherited-breakage");
+    let base = "[gd_scene format=3 uid=\"uid://inherited\"]\n\n\
+                [node name=\"Level\" type=\"Node2D\"]\n\
+                stale = NodePath(\"Ghost\")\n\n\
+                [node name=\"Hero\" type=\"Node2D\" parent=\".\"]\n";
+    let ours = base.replace(
+        "[node name=\"Hero\"",
+        "[node name=\"Extra\" type=\"Node\" parent=\".\"]\n\n[node name=\"Hero\"",
+    );
+    let theirs = format!("{base}\n[node name=\"Other\" type=\"Node\" parent=\".\"]\n");
+    let b = s.write("base.tscn", base);
+    let o = s.write("ours.tscn", &ours);
+    let t = s.write("theirs.tscn", &theirs);
+
+    let out = merge_to_stdout(&b, &o, &t);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("falling back to a text merge"), "{err}");
+    assert!(err.contains("base.tscn"), "the message has to name the file: {err}");
+    assert!(err.contains("NodePath(\"Ghost\")"), "the message has to say why: {err}");
+
+    let (expected, expected_code) = git_merge_file(&o, &b, &t);
+    assert_eq!(out.status.code(), expected_code, "git's exit status has to be passed through");
+    assert_eq!(stdout(&out), expected, "the fallback must reproduce git's own merge exactly");
+    // The two additions do not overlap, so git merges them cleanly on its own:
+    // what is lost is the semantic merge, not anybody's work.
+    assert_eq!(out.status.code(), Some(0));
+    assert!(stdout(&out).contains("name=\"Extra\""), "{}", stdout(&out));
+    assert!(stdout(&out).contains("name=\"Other\""), "{}", stdout(&out));
+}
+
 /// The driver is configured per repository and committed as `.gitattributes`,
 /// so a teammate who has not installed gdmerge still has git calling it. If
 /// that call simply fails, git leaves `%A` holding only our side, marks the

@@ -267,10 +267,13 @@ fn deleting_a_node_another_branch_references_conflicts() {
     assert!(outcome.conflicts[0].detail.contains("Hero"), "{:?}", outcome.conflicts);
 }
 
-/// Breakage that was already in the ancestor is not this merge's doing, so it
-/// passes through instead of blocking unrelated work. `check` still reports it.
+/// Breakage that was already in the ancestor is not this merge's doing, so the
+/// library passes it through rather than raising a conflict over it. That is
+/// as far as it goes: `gdmerge merge` validates its inputs before merging and
+/// hands a file with a broken reference to git's text merge, which the CLI
+/// tests pin. `check` reports the break either way.
 #[test]
-fn a_reference_that_was_already_broken_does_not_block_a_merge() {
+fn the_library_passes_an_inherited_broken_reference_through() {
     let base = format!(
         "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\
          stale = NodePath(\"Ghost\")\n\n\

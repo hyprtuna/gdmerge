@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A file carrying a reference that was broken before the merge is handed to git's text merge, and
+  the notes now say so. Since 0.3.2 every input has to pass the validation `gdmerge check` runs
+  before the semantic merge touches it, and a `NodePath` that names nothing fails that validation,
+  so such a file goes to `git merge-file` whole, with git's exit status, as the README's table
+  says. The 0.3.0 "Upgrading" note claimed a reference that was already broken was passed through
+  and did not block anything; that stopped being true in 0.3.2, and the note now carries a
+  correction. The test guarding the old claim called the library directly, which does still pass
+  an inherited break through; it now exercises the command and asserts the fallback. Running
+  `gdmerge check` on the file and fixing what it reports gets the semantic merge back for it.
+
 ### Fixed
 
 - `gdmerge check` now catches two siblings that share an `index`. The rule only read the bare
@@ -83,6 +95,8 @@ renames improve rather than conflict, because the references now follow the rena
 conflicts is the case where following them is impossible, such as one branch deleting a node
 the other branch started referencing. A reference that was already broken before the merge is
 passed through as before, so existing breakage does not block anything.
+Correction: the last sentence stopped being true in 0.3.2, which hands such a file to git's text
+merge; see the 0.3.3 entry.
 
 ### Added
 

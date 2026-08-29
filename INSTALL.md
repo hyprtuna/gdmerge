@@ -161,8 +161,14 @@ report that the executable was not found.
 that git only invokes a merge driver when both sides changed the file; if only one side changed it,
 git takes that side without consulting any driver.
 
-**`gdmerge: falling back to a text merge`.** One of the three inputs did not parse. The message names
-which one and gives a line and column. Please open an issue with the three files attached.
+**`gdmerge: falling back to a text merge`.** One of the three inputs did not parse, or parsed and
+failed the validation `gdmerge check` runs. The message names the file and the reason. A reference
+that was already broken before the merge is enough, such as a `NodePath` naming a node that is not
+there: a file the checks reject is one the semantic merge cannot reason about safely, so git's own
+text merge runs instead, with its exit status, and nothing is lost. To get the semantic merge back
+for that file, run `gdmerge check` on it, fix what it reports, and commit the fix; from then on
+gdmerge merges it again. If the file parses and passes `check`, please open an issue with the three
+files attached.
 
 **gdmerge is not on `PATH` during a merge.** git runs the driver through your shell, so the binary
 has to be on the `PATH` git sees, which is not always the one your interactive shell has. When it
