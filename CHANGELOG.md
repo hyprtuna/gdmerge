@@ -27,6 +27,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   diff prints now goes through the same rule as a value, and the seeded property test covers long
   node names, parent paths and property keys alongside long values.
 
+- `gdmerge check` with no files exits 0 and reports `0 files checked, 0 failed`. It required at
+  least one argument, so INSTALL's CI snippet, `gdmerge check $(git ls-files '*.tscn' '*.tres')`,
+  failed with exit status 2 in a repository that had no scene files yet.
+
 ## [0.3.5] - 2026-08-29
 
 ### Changed
