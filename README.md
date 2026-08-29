@@ -177,8 +177,16 @@ directly: `gdmerge mergetool base.tscn ours.tscn theirs.tscn out.tscn`.
 
 `gdmerge check` parses a file, proves it round-trips byte for byte, and validates it structurally:
 dangling `ExtResource`/`SubResource` references, duplicate ids, duplicate or orphaned node paths,
-more than one root, colliding sibling indices, and a stale `load_steps`. It is useful on its own as
-a pre-commit hook:
+more than one root, colliding sibling indices, and a stale `load_steps`.
+
+It also resolves every `NodePath` in the file against the scene tree, from the node that holds it,
+including animation track paths inside sub-resources, exported node paths, `%unique` names and the
+`path:subname` form. A path that names nothing is an error; one that reaches into an instanced
+scene, or above the root, is reported as unverifiable rather than wrong. This is the check that
+catches a scene wired to a node somebody renamed, which loads without complaint and then does
+nothing.
+
+It is useful on its own as a pre-commit hook:
 
 ```console
 $ gdmerge check level.tscn
@@ -274,7 +282,8 @@ never worse off than without it installed.
 Its grammar follows Godot's own `VariantParser` and `ResourceLoaderText`. During development it was
 run over 814 `.tscn` and `.tres` files from public Godot 4 projects; all 814 parsed and re-serialised
 byte for byte. Thirty of those files ship as fixtures, and the byte-exact round trip over them is a
-hard gate in CI.
+hard gate in CI. Three fuzz targets cover the tokenizer, the value parser and whole-document
+parsing, and run weekly; the round trip is one of the properties they assert.
 
 ## Contributing
 
