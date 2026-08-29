@@ -101,14 +101,15 @@ would collide gets a new one.
 | One branch deletes a node the other did not touch | deleted |
 | Both branches add the same node with the same contents | one copy |
 | Both branches reference one resource under different ids | matched by `uid`, then by `path`; one entry |
-| Sub-resources with identical contents but different ids | matched by content; one entry |
+| Sub-resources given different ids on each branch | matched by where they are used, then by their contents; one entry |
+| Each branch edits a *different* property of one sub-resource | both edits applied, still one sub-resource |
 | `load_steps` disagreeing between branches | recomputed from the merged file |
 | Both branches set the *same* property to different values | **conflict**, markers around that node only |
+| Both branches set the *same* property of one sub-resource | **conflict**, markers around that `[sub_resource]` only |
 | Both branches rename one node to different names | **conflict**, markers around that node only |
 | A merge would leave a `NodePath` naming a node that is gone | **conflict**, markers around the node holding the path, which is named along with the path |
 | One branch deletes a node the other edited | **conflict**, markers around that node only |
-| Both branches change one sub-resource differently | both kept; **conflict** at the node that references it |
-| A file gdmerge cannot parse | hands the whole merge to `git merge-file` and returns its exit status |
+| A file gdmerge cannot parse, or that `check` rejects | hands the whole merge to `git merge-file` and returns its exit status |
 
 Conflict markers wrap the affected `[node]` or `[sub_resource]` section, not the whole file, so the
 rest of the scene stays readable and the part you need to look at is obvious.
@@ -229,8 +230,11 @@ repos:
 - **Godot 4 text formats only.** No `.escn`, no binary `.scn` / `.res`, no Godot 3 files. Those fall
   through to git's text merge.
 - **No GUI and no editor plugin.** It is a command-line merge driver.
-- Sub-resources are matched by content, so *changing* one on both branches produces two
-  sub-resources plus a conflict at the referencing node, rather than a merge of the two.
+- **A sub-resource used from more than one place is matched by its contents alone.** A sub-resource
+  is normally matched by where it is used, which is what lets one that both branches edited stay a
+  single resource. Where it is referenced from several nodes, or from none, only its contents
+  identify it, so editing it on both branches produces two sub-resources and a conflict at each node
+  that references it.
 
 ### What happens to a NodePath
 
