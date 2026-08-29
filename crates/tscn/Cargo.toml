@@ -1,0 +1,20 @@
+[package]
+name = "tscn"
+description = "Lossless parser, serializer and semantic model for Godot 4 text scene and resource files (.tscn/.tres)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories = ["parser-implementations", "game-development"]
+
+[lib]
+name = "tscn"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
