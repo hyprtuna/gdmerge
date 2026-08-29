@@ -17,6 +17,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Sub-resources are matched by where they are used as well as by their contents. A sub-resource
+  edited on both branches used to stop looking like one thing, so it was duplicated and the node
+  referencing it conflicted. It is now recognised as a single entity: edits to different properties
+  merge, and edits to the same property conflict on the sub-resource itself, naming the property.
+  Where a sub-resource is used from more than one place, or from none, its contents still identify
+  it.
 - `NodePath` values now follow a rename or reparent. A path is resolved against the scene tree from
   the node holding it and written out again naming the same node, in property values, animation
   track paths inside sub-resources, exported node paths, the `path:subname` form and `%unique`
