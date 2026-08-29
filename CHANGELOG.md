@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-29
+
+### Upgrading
+
+Merges that used to succeed can now conflict, deliberately. gdmerge validates its own result
+and refuses to hand back a scene that is wired to a node which is not there. In practice most
+renames improve rather than conflict, because the references now follow the rename; what
+conflicts is the case where following them is impossible, such as one branch deleting a node
+the other branch started referencing. A reference that was already broken before the merge is
+passed through as before, so existing breakage does not block anything.
+
 ### Added
 
 - `gdmerge check` now validates every `NodePath` in a file: property values, animation track paths
@@ -50,6 +61,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A timing guard over the largest fixture, so an accidentally quadratic parser or merge shows up as
+  a test failure rather than as a slow tool.
 - Fuzz targets for the tokenizer, the variant parser and whole-document parsing, in `fuzz/`, with a
   weekly workflow that runs each for ten minutes.
 
@@ -117,7 +130,8 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.0
 [0.2.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.1.0
