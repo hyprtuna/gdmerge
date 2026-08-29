@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- INSTALL's commands no longer assume `~/.local/bin` exists. `install -m755 gdmerge
+  ~/.local/bin/gdmerge` failed with "No such file or directory" on a system without that
+  directory; the documented commands use `install -D`, which creates it, with the `mkdir -p`
+  alternative for macOS, whose `install` has no `-D`. The whole sequence was run verbatim under a
+  home directory with no `.local`.
+
 ### Fixed
 
 - Conflict reports are bounded again. 0.3.4 set out to stop cutting ids short and removed the

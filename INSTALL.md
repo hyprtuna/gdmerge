@@ -20,10 +20,12 @@ published beside it, extract it, and put `gdmerge` somewhere on your `PATH`. Eve
 $ sha256sum -c gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz.sha256
 gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz: OK
 $ tar xzf gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz
-$ install -m755 gdmerge ~/.local/bin/gdmerge
+$ install -D -m755 gdmerge ~/.local/bin/gdmerge
 ```
 
-On macOS, `shasum -a 256 -c` takes the place of `sha256sum -c`.
+`install -D` creates `~/.local/bin` if it is not there yet. On macOS, `shasum -a 256 -c` takes the
+place of `sha256sum -c`, and its `install` has no `-D`, so create the directory first:
+`mkdir -p ~/.local/bin && install -m755 gdmerge ~/.local/bin/gdmerge`.
 
 On macOS the binaries are unsigned, so the first run may need
 `xattr -d com.apple.quarantine ./gdmerge`.
@@ -40,8 +42,10 @@ $ cargo install gdmerge
 $ git clone https://github.com/hyprtuna/gdmerge
 $ cd gdmerge
 $ cargo build --release
-$ install -m755 target/release/gdmerge ~/.local/bin/gdmerge
+$ install -D -m755 target/release/gdmerge ~/.local/bin/gdmerge
 ```
+
+As above, on macOS `mkdir -p ~/.local/bin` first and drop the `-D`.
 
 Requires Rust 1.85 or newer for the tool. The `tscn` library alone builds on 1.74. `cargo test` runs the full suite, including a real `git merge` through
 the installed driver, so `git` needs to be on `PATH`.
