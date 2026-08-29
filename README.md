@@ -132,8 +132,14 @@ and `git mergetool --tool=gdmerge` lays the whole node out, one property per row
 ![A conflicting merge, then git mergetool showing the base, ours and theirs values of every property on the conflicting node](docs/conflict.svg)
 
 ```console
-$ git mergetool --tool=gdmerge
-1 conflict in level.tscn
+$ git mergetool --no-prompt --tool=gdmerge
+Merging:
+player.tscn
+
+Normal merge conflict for 'player.tscn':
+  {local}: modified file
+  {remote}: modified file
+1 conflict in player.tscn
 
 Conflict 1 of 1: root node "Player"
   speed changed differently on both sides
@@ -146,7 +152,13 @@ Conflict 1 of 1: root node "Player"
 
 Rows marked with > are the ones to resolve. Edit the file, remove the conflict
 markers, then stage it.
+merge of player.tscn failed
 ```
+
+The first lines and the last are git's own: `--no-prompt` skips its question about launching the
+tool, and `merge of player.tscn failed` is how it reports a mergetool that exited non-zero, which
+gdmerge does whenever conflicts remain. Nothing was lost; the file holds the markers and both
+sides, as the table describes.
 
 `gdmerge git-install` registers the mergetool along with the driver. To reach for it without
 typing `--tool` every time, `git config merge.tool gdmerge`.
