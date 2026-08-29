@@ -14,7 +14,15 @@ enum Destination {
 }
 
 pub fn run(args: MergeArgs) -> Result<i32> {
-    let (base, ours, theirs, dest, marker_size) = resolve_inputs(&args)?;
+    let (base, ours, theirs, dest, marker_size, pathname) = resolve_inputs(&args)?;
+
+    // Under the driver the three inputs are git's temporary files, whose
+    // names mean nothing to anyone; git passes the scene's own path as %P for
+    // exactly this, so that is what a person is told.
+    let name = |path: &Path, version: &str| match &pathname {
+        Some(scene) => format!("{scene}, {version} version"),
+        None => path.display().to_string(),
+    };
 
     let opts = MergeOptions {
         ours_label: args.ours_label.clone(),
@@ -44,10 +52,13 @@ pub fn run(args: MergeArgs) -> Result<i32> {
     let (b, o, t) = match parsed {
         (Ok(b), Ok(o), Ok(t)) => (b, o, t),
         (b, o, t) => {
-            let why = [(&base, b.err()), (&ours, o.err()), (&theirs, t.err())]
-                .into_iter()
-                .find_map(|(path, e)| e.map(|e| format!("{}: {e}", path.display())))
-                .unwrap_or_default();
+            let why =
+                [(&base, "base", b.err()), (&ours, "ours", o.err()), (&theirs, "theirs", t.err())]
+                    .into_iter()
+                    .find_map(|(path, version, e)| {
+                        e.map(|e| format!("{}: {e}", name(path, version)))
+                    })
+                    .unwrap_or_default();
             eprintln!("gdmerge: falling back to a text merge ({why})");
             return text_merge();
         }
@@ -56,11 +67,17 @@ pub fn run(args: MergeArgs) -> Result<i32> {
     // Parsing is not enough. A file that parses but does not hold together is
     // one the semantic merge cannot reason about safely, so it gets the same
     // treatment as one that does not parse at all.
-    let invalid = [(&base, &b, &base_src), (&ours, &o, &ours_src), (&theirs, &t, &theirs_src)]
-        .into_iter()
-        .find_map(|(path, doc, src)| fallback::structural_error(doc, src).map(|why| (path, why)));
-    if let Some((path, why)) = invalid {
-        eprintln!("gdmerge: falling back to a text merge ({}: {why})", path.display());
+    let invalid = [
+        (&base, "base", &b, &base_src),
+        (&ours, "ours", &o, &ours_src),
+        (&theirs, "theirs", &t, &theirs_src),
+    ]
+    .into_iter()
+    .find_map(|(path, version, doc, src)| {
+        fallback::structural_error(doc, src).map(|why| (path, version, why))
+    });
+    if let Some((path, version, why)) = invalid {
+        eprintln!("gdmerge: falling back to a text merge ({}: {why})", name(path, version));
         return text_merge();
     }
 
@@ -99,7 +116,8 @@ fn emit(dest: &Destination, text: &str) -> Result<()> {
 ///
 /// git invokes the driver as `%O %A %B %L %P`: ancestor, ours, theirs, conflict
 /// marker size, and the path being merged. The result must be left in `%A`.
-type Inputs = (PathBuf, PathBuf, PathBuf, Destination, usize);
+/// The last item is `%P` when it was given: the name to show for the file.
+type Inputs = (PathBuf, PathBuf, PathBuf, Destination, usize, Option<String>);
 
 fn resolve_inputs(args: &MergeArgs) -> Result<Inputs> {
     if let (Some(base), Some(ours), Some(theirs)) = (&args.base, &args.ours, &args.theirs) {
@@ -110,7 +128,7 @@ fn resolve_inputs(args: &MergeArgs) -> Result<Inputs> {
             Some(p) => Destination::File(p.clone()),
             None => Destination::Stdout,
         };
-        return Ok((base.clone(), ours.clone(), theirs.clone(), dest, args.marker_size));
+        return Ok((base.clone(), ours.clone(), theirs.clone(), dest, args.marker_size, None));
     }
     if args.base.is_some() || args.ours.is_some() || args.theirs.is_some() {
         bail!("--base, --ours and --theirs must be given together");
@@ -127,7 +145,11 @@ fn resolve_inputs(args: &MergeArgs) -> Result<Inputs> {
     let ours = PathBuf::from(&p[1]);
     let theirs = PathBuf::from(&p[2]);
     // %L is a number; %P is a path. Either, both, or neither may follow.
-    let marker_size = p.get(3).and_then(|s| s.parse::<usize>().ok()).unwrap_or(args.marker_size);
+    let (marker_size, pathname) = match p.get(3).map(|s| s.parse::<usize>()) {
+        Some(Ok(size)) => (size, p.get(4).cloned()),
+        Some(Err(_)) => (args.marker_size, p.get(3).cloned()),
+        None => (args.marker_size, None),
+    };
     let dest = match &args.output {
         Some(path) => Destination::File(path.clone()),
         // git expects the driver to overwrite %A in place.
@@ -136,7 +158,7 @@ fn resolve_inputs(args: &MergeArgs) -> Result<Inputs> {
     ensure_exists(&base)?;
     ensure_exists(&ours)?;
     ensure_exists(&theirs)?;
-    Ok((base, ours, theirs, dest, marker_size))
+    Ok((base, ours, theirs, dest, marker_size, pathname))
 }
 
 fn ensure_exists(p: &Path) -> Result<()> {
