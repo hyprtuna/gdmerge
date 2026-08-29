@@ -18,6 +18,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `gdmerge check` reads every number the way Godot's loader does. 0.3.3 fixed the quoted `index`
+  spelling and left the rest of the class alone: `load_steps="99"` escaped the staleness warning,
+  and two siblings with `index="abc"` were accepted although Godot's `String::to_int` reads both as
+  0, a real collision. One helper now reads a bare or quoted number with Godot's rules, for
+  `load_steps` and `index` alike. A reference written the Godot 3 way, `SubResource( 1 )`, is also
+  reported on its own now, whatever the declaration looks like: only declarations were checked,
+  so a quoted `[sub_resource id="1"]` referenced that way passed, and a merge would have renumbered
+  the one without the other.
 - `gdmerge git-uninstall --global` puts the account back the way it was. It left the
   `core.attributesfile` entry that `git-install --global` had registered, and the attributes file
   itself, emptied; looking the file up the way `git-install` does, it could even register one on

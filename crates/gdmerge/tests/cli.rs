@@ -877,6 +877,21 @@ fn check_reports_a_dangling_unquoted_reference() {
     assert!(stdout(&out).contains("dangling SubResource(\"1\")"), "{}", stdout(&out));
 }
 
+/// The reference spelling is enough on its own: a quoted declaration referenced
+/// as `SubResource( 1 )` cannot be renumbered either.
+#[test]
+fn check_names_the_legacy_reference_form() {
+    let s = Scratch::new("legacy-ref");
+    let f = s.write("legacy.tscn", &LEGACY_BASE.replace("id=1]", "id=\"1\"]"));
+    let out = gdmerge(&["check", f.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        stdout(&out).contains("SubResource(1) uses the Godot 3 unquoted id form"),
+        "{}",
+        stdout(&out)
+    );
+}
+
 #[test]
 fn check_names_the_legacy_id_form() {
     let s = Scratch::new("legacy-id");

@@ -228,9 +228,9 @@ impl Section {
     /// one a merge can rewrite. Validation has to see the Godot 3
     /// `SubResource( 1 )` spelling too, or a reference to a resource that is
     /// not in the file goes unreported.
-    pub(crate) fn all_refs(&self) -> Vec<(RefKind, String)> {
+    pub(crate) fn all_refs(&self) -> Vec<(RefKind, String, bool)> {
         let mut out = Vec::new();
-        let mut visit = |kind, id| out.push((kind, id));
+        let mut visit = |kind, id, legacy| out.push((kind, id, legacy));
         for f in &self.fields {
             f.value.visit_refs(&mut visit);
         }

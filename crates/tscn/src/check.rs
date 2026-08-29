@@ -99,7 +99,13 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
     }
 
     for s in &doc.sections {
-        for (kind, id) in s.all_refs() {
+        for (kind, id, legacy) in s.all_refs() {
+            if legacy {
+                r.error(format!(
+                    "{}({id}) uses the Godot 3 unquoted id form; Godot 4 quotes resource ids",
+                    kind.ctor()
+                ));
+            }
             let known = match kind {
                 RefKind::Ext => ext_ids.contains(&id),
                 RefKind::Sub => sub_ids.contains(&id),
@@ -113,10 +119,10 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
     // `load_steps` is a loader progress hint. Godot omits it entirely in many
     // saved files, so only a *present* value is checked.
     if let Some(field) = doc.header().field("load_steps") {
-        if let Some(declared) = field.value.as_num() {
-            let expected = (ext_count + sub_count + 1) as f64;
+        if let Some(declared) = godot_int(&field.value) {
+            let expected = (ext_count + sub_count + 1) as i64;
             if declared != expected {
-                r.warn(format!("load_steps is {declared:.0} but should be {expected:.0}"));
+                r.warn(format!("load_steps is {declared} but should be {expected}"));
             }
         }
     }
@@ -243,7 +249,7 @@ fn check_nodes(doc: &Document, r: &mut CheckReport) {
     let mut index_dupes: BTreeMap<(&str, i64), usize> = BTreeMap::new();
     for s in &nodes {
         let (Some(parent), Some(index)) =
-            (s.field_str("parent"), s.field("index").and_then(|f| sibling_index(&f.value)))
+            (s.field_str("parent"), s.field("index").and_then(|f| godot_int(&f.value)))
         else {
             continue;
         };
@@ -256,18 +262,35 @@ fn check_nodes(doc: &Document, r: &mut CheckReport) {
     }
 }
 
-/// The value of a node's `index` field, whichever way it is spelled.
+/// A header field read as an integer, the way Godot's loader reads `index`
+/// and `load_steps`.
 ///
-/// Godot writes it quoted (`index="0"`), as it does every header field it
-/// reads back through a string, and its loader converts the text to a number.
-/// The bare form (`index=0`) is accepted too, since the loader takes it just
-/// the same, which means the two spellings of one number name the same slot.
-fn sibling_index(value: &Value) -> Option<i64> {
+/// Godot writes these quoted (`index="0"`) and converts the text when loading;
+/// the bare form is taken just the same. A bare number is truncated, and text
+/// goes through Godot's `String::to_int`, which is what decides whether two
+/// spellings name the same value.
+fn godot_int(value: &Value) -> Option<i64> {
     match value {
         Value::Num(n) => Some(*n as i64),
-        Value::Str(s) => s.trim().parse().ok(),
+        Value::Str(s) | Value::Name(s) => Some(to_int(s)),
         _ => None,
     }
+}
+
+/// Godot's `String::to_int`: the digits before the first `.` are added up
+/// whatever sits between them, and a `-` seen before any digit flips the sign.
+/// So `"12"` is 12, `"abc"` is 0, `"1a2"` is 12, and `"1.9"` is 1.
+fn to_int(s: &str) -> i64 {
+    let head = s.split('.').next().unwrap_or_default();
+    let (mut integer, mut sign) = (0i64, 1i64);
+    for c in head.chars() {
+        if let Some(d) = c.to_digit(10) {
+            integer = integer.saturating_mul(10).saturating_add(i64::from(d));
+        } else if integer == 0 && c == '-' {
+            sign = -sign;
+        }
+    }
+    integer.saturating_mul(sign)
 }
 
 /// True when `parent` sits inside a scene instanced by one of `instanced`.
@@ -284,4 +307,20 @@ fn covered_by_instance(parent: &str, instanced: &[String]) -> bool {
             // is an ancestor path that the instance's own scene provides.
             || i.starts_with(&format!("{parent}/"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_int;
+
+    #[test]
+    fn to_int_follows_godot() {
+        assert_eq!(to_int("12"), 12);
+        assert_eq!(to_int("abc"), 0);
+        assert_eq!(to_int("1a2"), 12);
+        assert_eq!(to_int("1.9"), 1);
+        assert_eq!(to_int("-5"), -5);
+        assert_eq!(to_int("--5"), 5);
+        assert_eq!(to_int(""), 0);
+    }
 }

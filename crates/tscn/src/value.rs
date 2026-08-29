@@ -217,18 +217,20 @@ impl Value {
     }
 
     /// Calls `visit` with every `ExtResource`/`SubResource` reference in this
-    /// value, however deeply nested, in either spelling.
+    /// value, however deeply nested, in either spelling; the flag is true for
+    /// the Godot 3 spelling.
     ///
     /// The parser records only the quoted form, because that is the only one it
     /// can rewrite in place. Godot 3 wrote `SubResource( 1 )`, which still has
-    /// to be *seen* so a reference to a resource that is not there is reported
-    /// rather than silently ignored.
-    pub(crate) fn visit_refs(&self, visit: &mut dyn FnMut(RefKind, String)) {
+    /// to be *seen*: so a reference to a resource that is not there is reported
+    /// rather than silently ignored, and so a file that still writes references
+    /// this way is known to be one whose ids cannot be renumbered.
+    pub(crate) fn visit_refs(&self, visit: &mut dyn FnMut(RefKind, String, bool)) {
         match self {
             Value::Call { name, args } => {
                 if let (Some(kind), [arg]) = (ref_kind(name), args.as_slice()) {
                     if let Some(id) = id_text(arg) {
-                        visit(kind, id);
+                        visit(kind, id, is_legacy_id(arg));
                         return;
                     }
                 }
