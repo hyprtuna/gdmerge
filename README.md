@@ -96,6 +96,7 @@ would collide gets a new one.
 | One branch reorders nodes, the other edits one of them | our order kept, their edit applied |
 | One branch renames or reparents a node, the other edits it | both applied: the node keeps the new path and gains the edit |
 | A renamed node's children, connections and `[editable]` entries | follow the rename automatically |
+| A `NodePath` naming a node the other branch renamed or reparented | rewritten to the new path, including inside animation tracks |
 | A node added under a subtree the other branch renamed | reparented onto the new path |
 | One branch deletes a node the other did not touch | deleted |
 | Both branches add the same node with the same contents | one copy |
@@ -104,6 +105,7 @@ would collide gets a new one.
 | `load_steps` disagreeing between branches | recomputed from the merged file |
 | Both branches set the *same* property to different values | **conflict**, markers around that node only |
 | Both branches rename one node to different names | **conflict**, markers around that node only |
+| A merge would leave a `NodePath` naming a node that is gone | **conflict**, with the stranded path named |
 | One branch deletes a node the other edited | **conflict**, markers around that node only |
 | Both branches change one sub-resource differently | both kept; **conflict** at the node that references it |
 | A file gdmerge cannot parse | hands the whole merge to `git merge-file` and returns its exit status |
@@ -191,9 +193,12 @@ ok   level.tscn
   a rename by their contents, so a branch that renames a node *and* changes it in one step no
   longer matches, and you get a delete against a modify. A rename on one branch and an edit on the
   other merges cleanly, which is the common case.
-- **Node paths inside property values are not rewritten.** A rename updates `parent`, connection
-  endpoints and `[editable]` paths, but a `NodePath("Old/Thing")` sitting in some property keeps
-  its old text.
+- **A `NodePath` is only rewritten when its meaning is certain.** It is resolved against the scene
+  tree, from the node that holds it, and rewritten to name the same node again. Where that cannot
+  be decided, the path is left exactly as it was: one that reaches into an instanced scene, one
+  that reads differently depending on which node it is measured from, and one using a `%unique`
+  name the file does not declare. If leaving it alone would strand the reference, the merge
+  conflicts rather than shipping a broken scene.
 - **Reordering is not merged element-wise.** If both branches reorder the same siblings, our order
   wins rather than the two being interleaved.
 - **`load_steps` is only recomputed when it is already present.** Godot omits it in many saved
@@ -203,6 +208,28 @@ ok   level.tscn
 - **No GUI and no editor plugin.** It is a command-line merge driver.
 - Sub-resources are matched by content, so *changing* one on both branches produces two
   sub-resources plus a conflict at the referencing node, rather than a merge of the two.
+
+### What happens to a NodePath
+
+Renaming a node changes every path that names it, and those paths are spread across the file.
+Here is exactly what gdmerge does with each place they appear.
+
+| Where the path is | On a rename or reparent |
+| --- | --- |
+| A node's `parent` | rewritten |
+| `[connection]` `from` and `to` | rewritten |
+| `[editable path=...]` | rewritten |
+| A `NodePath()` in any property value | rewritten, relative to the node holding it |
+| An animation track path in a sub-resource | rewritten, resolved through the player's `root_node` |
+| An exported node path declared by `node_paths=` | rewritten |
+| The `path:subname` form | rewritten, keeping the subname |
+| A `%unique` name | the name is updated, and the `%` form is kept |
+| A path into an instanced scene | left alone: that scene decides what it means |
+| An absolute path, or one above the root | left alone: a parent scene decides |
+| Anything ambiguous | left alone, and conflicts if that strands it |
+
+Paths are resolved and re-expressed against the tree, never matched as text, so a node called
+`Player` cannot be confused with one called `PlayerCamera`.
 
 ## Compared to the alternatives
 

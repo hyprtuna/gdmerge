@@ -17,11 +17,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- A merge whose result would contain a `NodePath` pointing at nothing is now reported as a conflict
-  naming the stranded path, instead of succeeding. In particular, renaming or reparenting a node on
-  one branch while the other branch leaves a reference to its old path behind used to merge cleanly
-  and produce a scene wired to a node that was not there. Rewriting those references, rather than
-  conflicting, is the next step.
+- `NodePath` values now follow a rename or reparent. A path is resolved against the scene tree from
+  the node holding it and written out again naming the same node, in property values, animation
+  track paths inside sub-resources, exported node paths, the `path:subname` form and `%unique`
+  names. Paths are never matched as text, so `Player` is not confused with `PlayerCamera`. Anything
+  whose meaning is not certain is left alone: paths into instanced scenes, paths above the root, and
+  paths that read differently depending on which node they are measured from.
+- A merge whose result would strand a `NodePath` is reported as a conflict naming the path, instead
+  of succeeding. A reference that was already broken in the common ancestor passes through
+  untouched, since it is not the merge's doing; `check` still reports it.
 
 ### Fixed
 
