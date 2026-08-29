@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://npreparent"]
+
+[node name="Level" type="Node2D"]
+
+[node name="Holder" type="Node2D" parent="."]
+
+[node name="Item" type="Sprite2D" parent="Holder"]
+offset = Vector2(1, 1)

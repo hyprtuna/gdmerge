@@ -15,8 +15,8 @@ use std::fmt::Write as _;
 
 use crate::align::{Alignment, Which};
 use crate::diff::diff_scenes;
-use crate::doc::{Document, Section, SectionKind};
-use crate::nodepath::{findings, Resolution};
+use crate::doc::{quote, Document, Rewrite, Section, SectionKind};
+use crate::nodepath::{findings, Resolution, Rewriter};
 use crate::scene::{node_path, EntityId, Scene};
 use crate::value::RefKind;
 
@@ -93,7 +93,41 @@ type Remap<'a> = &'a dyn Fn(RefKind, &str) -> Option<String>;
 /// merged document's naming.
 struct Replay<'a> {
     ids: Remap<'a>,
-    paths: &'a dyn Fn(&str) -> String,
+    /// Rewrites a node path written in a header field, which is a bare path.
+    field_paths: &'a dyn Fn(&str) -> String,
+    /// Follows node paths inside values through renames, tree aware.
+    rewriter: &'a Rewriter,
+    /// Where each of this side's node paths ended up.
+    moved: &'a dyn Fn(&str) -> String,
+    /// The common ancestor, used when a side cannot resolve a path in its own
+    /// tree. A branch that renamed a node and left one of its own references
+    /// behind no longer has anywhere to resolve it from, but the ancestor still
+    /// does, and that is also what keeps the answer the same when the two sides
+    /// are swapped.
+    ancestor: &'a Rewriter,
+    ancestor_moved: &'a dyn Fn(&str) -> String,
+    /// Translates one of this side's node paths into the ancestor's naming.
+    into_ancestor: &'a dyn Fn(&str) -> String,
+}
+
+/// Runs `render` with the rewrite that applies while replaying `section`.
+///
+/// The path closure has to be built here rather than handed out, because it
+/// borrows both the section and the side it came from.
+fn with_rewrite<R>(
+    replay: &Replay<'_>,
+    section: &Section,
+    render: impl FnOnce(Rewrite<'_>) -> R,
+) -> R {
+    let paths = |path: &str| {
+        let bases = replay.rewriter.bases(section);
+        replay.rewriter.rewrite(&bases, path, replay.moved).or_else(|| {
+            let ancestor_bases: Vec<String> =
+                bases.iter().map(|b| (replay.into_ancestor)(b)).collect();
+            replay.ancestor.rewrite(&ancestor_bases, path, replay.ancestor_moved)
+        })
+    };
+    render(Rewrite { ids: replay.ids, paths: &paths })
 }
 
 /// One of the three inputs, addressed by merged identity rather than its own.
@@ -252,18 +286,18 @@ pub fn merge(
 
     let mut order = merged_order(&vo, &vt, &plan);
     let mut final_ids = assign_ids(&order, &vo, &vt);
-    let mut text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
+    let mut text = emit(ours, &order, &plan, &vb, &vo, &vt, &final_ids, &align, opts);
 
     // A merge that leaves the file pointing at a node that is no longer there
     // loads without complaint and does nothing, which is worse than a conflict.
     // So it becomes one, and the file is emitted again with that entity marked.
     if conflicts.is_empty() {
-        let stale = stale_references(&text, &align, &vo, &vt, &mut plan);
+        let stale = stale_references(&text, &align, &vb, &vo, &vt, &mut plan);
         if !stale.is_empty() {
             conflicts.extend(stale);
             order = merged_order(&vo, &vt, &plan);
             final_ids = assign_ids(&order, &vo, &vt);
-            text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
+            text = emit(ours, &order, &plan, &vb, &vo, &vt, &final_ids, &align, opts);
         }
     }
 
@@ -281,16 +315,28 @@ pub fn merge(
 fn stale_references(
     text: &str,
     align: &Alignment,
+    vb: &View<'_>,
     vo: &View<'_>,
     vt: &View<'_>,
     plan: &mut HashMap<EntityId, Res>,
 ) -> Vec<Conflict> {
     let Ok(doc) = Document::parse(text) else { return Vec::new() };
+    // A reference that was already broken before anyone touched the file is not
+    // this merge's doing, and conflicting on it would block work nobody caused.
+    // check still reports it.
+    let inherited: HashSet<String> = findings(vb.scene.doc)
+        .into_iter()
+        .filter(|(_, outcome)| matches!(outcome, Resolution::Missing(_)))
+        .map(|(reference, _)| format!("{}\u{0}{}", reference.site.describe(), reference.path))
+        .collect();
     let renames: HashMap<String, String> = align.renames().into_iter().collect();
     let mut conflicts = Vec::new();
     let mut blamed: HashSet<EntityId> = HashSet::new();
 
     for (reference, outcome) in findings(&doc) {
+        if inherited.contains(&format!("{}\u{0}{}", reference.site.describe(), reference.path)) {
+            continue;
+        }
         let target = match outcome {
             Resolution::Missing(target) => target,
             // A unique name with nowhere to come from is just as broken, and a
@@ -303,6 +349,12 @@ fn stale_references(
             reference.path,
             reference.site.describe(),
             target
+        );
+        // When the entity reported is the site itself, the detail should not
+        // repeat it back.
+        let alone = format!(
+            "NodePath(\"{}\") points at \"{}\", which the merge removes",
+            reference.path, target
         );
         // Did a branch rename this very node out from under the reference?
         match renames.get(&target) {
@@ -332,7 +384,7 @@ fn stale_references(
             }
             None => conflicts.push(Conflict {
                 entity: reference.site.describe(),
-                detail,
+                detail: alone,
                 key: None,
                 rows: Vec::new(),
             }),
@@ -603,6 +655,7 @@ fn emit(
     ours: &Document,
     order: &[EntityId],
     plan: &HashMap<EntityId, Res>,
+    vb: &View<'_>,
     vo: &View<'_>,
     vt: &View<'_>,
     final_ids: &HashMap<EntityId, String>,
@@ -617,8 +670,36 @@ fn emit(
     let map_theirs = remapper(&vt.scene, final_ids);
     let paths_ours = |p: &str| align.path(Which::Ours, p);
     let paths_theirs = |p: &str| align.path(Which::Theirs, p);
-    let r_ours = Replay { ids: &map_ours, paths: &paths_ours };
-    let r_theirs = Replay { ids: &map_theirs, paths: &paths_theirs };
+    let rw_ours = Rewriter::new(vo.scene.doc);
+    let rw_theirs = Rewriter::new(vt.scene.doc);
+    let rw_base = Rewriter::new(vb.scene.doc);
+    let paths_base = |p: &str| align.path(Which::Base, p);
+    let ours_into_base = |p: &str| {
+        let merged = align.path(Which::Ours, p);
+        align.base_path_of(&merged).unwrap_or(merged)
+    };
+    let theirs_into_base = |p: &str| {
+        let merged = align.path(Which::Theirs, p);
+        align.base_path_of(&merged).unwrap_or(merged)
+    };
+    let r_ours = Replay {
+        ids: &map_ours,
+        field_paths: &paths_ours,
+        rewriter: &rw_ours,
+        moved: &paths_ours,
+        ancestor: &rw_base,
+        ancestor_moved: &paths_base,
+        into_ancestor: &ours_into_base,
+    };
+    let r_theirs = Replay {
+        ids: &map_theirs,
+        field_paths: &paths_theirs,
+        rewriter: &rw_theirs,
+        moved: &paths_theirs,
+        ancestor: &rw_base,
+        ancestor_moved: &paths_base,
+        into_ancestor: &theirs_into_base,
+    };
     let nl = ours.newline();
 
     let mut out = String::new();
@@ -718,7 +799,7 @@ fn render_section(
         out.push_str(&p.sep_eq);
         out.push('=');
         out.push_str(&p.sep_val);
-        out.push_str(&p.rendered(replay.ids));
+        out.push_str(&with_rewrite(replay, section, |rw| p.rendered(rw)));
     }
     out
 }
@@ -743,30 +824,18 @@ fn field_text(
         },
         _ if path_field(section.kind, name) => {
             let current = section.field_str(name).unwrap_or_default();
-            let mapped = (replay.paths)(current);
+            let mapped = (replay.field_paths)(current);
             if mapped == current {
                 raw.to_string()
             } else {
                 quote(&mapped)
             }
         }
-        _ => section.field(name).map(|f| f.rendered(replay.ids)).unwrap_or_else(|| raw.to_string()),
+        _ => section
+            .field(name)
+            .map(|f| with_rewrite(replay, section, |rw| f.rendered(rw)))
+            .unwrap_or_else(|| raw.to_string()),
     }
-}
-
-/// Quotes a node path the way Godot's writer does.
-fn quote(path: &str) -> String {
-    let mut out = String::with_capacity(path.len() + 2);
-    out.push('"');
-    for c in path.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            _ => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -814,7 +883,7 @@ fn render_merged(
         out.push_str(&p.sep_eq);
         out.push('=');
         out.push_str(&p.sep_val);
-        out.push_str(&p.rendered(replay.ids));
+        out.push_str(&with_rewrite(replay, section, |rw| p.rendered(rw)));
     }
     out
 }

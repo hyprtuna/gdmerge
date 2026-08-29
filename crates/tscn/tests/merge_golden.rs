@@ -11,6 +11,12 @@ use std::path::{Path, PathBuf};
 
 use tscn::{Document, MergeOptions};
 
+/// True while the expected files are being re-recorded, when any test that
+/// reads them would be comparing against a file another test is still writing.
+fn recording() -> bool {
+    std::env::var_os("GDMERGE_BLESS").is_some()
+}
+
 fn cases_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/merge_cases")
 }
@@ -47,7 +53,7 @@ fn cases() -> Vec<Case> {
 
 #[test]
 fn golden_merges_match() {
-    let bless = std::env::var_os("GDMERGE_BLESS").is_some();
+    let bless = recording();
     let mut failures = Vec::new();
 
     for case in cases() {
@@ -183,6 +189,9 @@ fn unchanged_side_preserves_the_other_verbatim() {
 /// CRLF files and expects CRLF back.
 #[test]
 fn crlf_documents_stay_crlf() {
+    if recording() {
+        return;
+    }
     fn to_crlf(s: &str) -> String {
         s.replace("\r\n", "\n").replace('\n', "\r\n")
     }

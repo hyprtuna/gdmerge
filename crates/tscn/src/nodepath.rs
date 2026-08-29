@@ -90,7 +90,7 @@ pub(crate) struct Tree {
     /// Nodes that instance another scene, whose children live in that scene.
     instanced: Vec<String>,
     /// `unique_name_in_owner` nodes, by the name a `%` path would use.
-    unique: HashMap<String, String>,
+    pub(crate) unique: HashMap<String, String>,
 }
 
 fn segments(path: &str) -> Vec<&str> {
@@ -431,4 +431,120 @@ pub(crate) fn findings(doc: &Document) -> Vec<(Reference, Resolution)> {
         }
     }
     out
+}
+
+/// Rewrites node paths in one document so they still name the same nodes after
+/// a merge has moved things around.
+///
+/// Resolution decides what a path meant; the answer is then expressed again
+/// from wherever the holder ended up. Nothing is matched as text, so a path is
+/// only ever changed when it is understood.
+pub(crate) struct Rewriter {
+    tree: Tree,
+    sub_bases: HashMap<String, Vec<String>>,
+}
+
+impl Rewriter {
+    pub(crate) fn new(doc: &Document) -> Rewriter {
+        let mut sub_bases: HashMap<String, Vec<String>> = HashMap::new();
+        for (id, bases) in sub_resource_bases(doc) {
+            let mut bases: Vec<String> = bases.into_iter().collect();
+            bases.sort();
+            sub_bases.insert(id, bases);
+        }
+        Rewriter { tree: Tree::new(doc), sub_bases }
+    }
+
+    /// The nodes a path in `section` could be measured from, in the order they
+    /// are tried.
+    pub(crate) fn bases(&self, section: &Section) -> Vec<String> {
+        let mut bases = match section.kind {
+            SectionKind::Node => node_bases(section, &node_path(section), false),
+            SectionKind::SubResource => section
+                .field_str("id")
+                .and_then(|id| self.sub_bases.get(id).cloned())
+                .unwrap_or_default(),
+            SectionKind::Connection | SectionKind::Editable => vec![".".to_string()],
+            _ => Vec::new(),
+        };
+        if !bases.iter().any(|b| b == ".") {
+            bases.push(".".to_string());
+        }
+        bases
+    }
+
+    /// The path to write instead, or `None` to leave it exactly as it is.
+    ///
+    /// `None` covers everything uncertain: a path that does not resolve, one
+    /// that resolves differently depending on which base is assumed, and one
+    /// that reaches outside the file. Leaving those alone is what makes the
+    /// remaining conflict meaningful rather than a guess.
+    pub(crate) fn rewrite(
+        &self,
+        bases: &[String],
+        path: &str,
+        moved: &dyn Fn(&str) -> String,
+    ) -> Option<String> {
+        let (node_part, subname) = match path.split_once(':') {
+            Some((node, rest)) => (node, Some(rest)),
+            None => (path, None),
+        };
+        if node_part.is_empty() || node_part.starts_with('/') {
+            return None;
+        }
+
+        // Find the one reading of this path that every plausible base agrees on.
+        let mut agreed: Option<(String, String)> = None;
+        for base in bases {
+            let Resolution::Node(target) = self.tree.resolve(base, node_part) else { continue };
+            match &agreed {
+                None => agreed = Some((base.clone(), target)),
+                Some((_, first)) if *first == target => {}
+                // Two readings, two answers: rewriting would be a guess.
+                Some(_) => return None,
+            }
+        }
+        let (base, target) = agreed?;
+
+        let base_now = moved(&base);
+        let target_now = moved(&target);
+        if base_now == base && target_now == target {
+            return None;
+        }
+
+        let rewritten = if let Some(name) = node_part.strip_prefix('%') {
+            // Keep the unique-name form: only the name itself needs updating,
+            // and turning it into a plain path would lose what it is for.
+            let unique_now = moved(self.tree.unique.get(name)?);
+            let tail =
+                target_now.strip_prefix(&unique_now).map(|rest| rest.trim_start_matches('/'))?;
+            let leaf = unique_now.rsplit('/').next()?;
+            if tail.is_empty() {
+                format!("%{leaf}")
+            } else {
+                format!("%{leaf}/{tail}")
+            }
+        } else {
+            relative(&base_now, &target_now)
+        };
+
+        Some(match subname {
+            Some(rest) => format!("{rewritten}:{rest}"),
+            None => rewritten,
+        })
+    }
+}
+
+/// Expresses `to` as a path relative to `from`.
+fn relative(from: &str, to: &str) -> String {
+    let from = segments(from);
+    let to = segments(to);
+    let shared = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut parts: Vec<&str> = vec![".."; from.len() - shared];
+    parts.extend(&to[shared..]);
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
 }

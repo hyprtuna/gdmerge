@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://nptrack"]
+[gd_scene format=3 uid="uid://nptrack"]
 
 [sub_resource type="Animation" id="Animation_walk"]
 length = 1.0
 tracks/0/type = "value"
-tracks/0/path = NodePath("Hero:position")
+tracks/0/path = NodePath("Player:position")
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_main"]
 _data = {
@@ -12,13 +12,8 @@ _data = {
 
 [node name="Level" type="Node2D"]
 
-<<<<<<< ours
 [node name="Player" type="Sprite2D" parent="."]
 offset = Vector2(0, 0)
-=======
-[node name="Hero" type="Sprite2D" parent="."]
-offset = Vector2(8, 8)
->>>>>>> theirs
 
 [node name="Anim" type="AnimationPlayer" parent="."]
 libraries/ = SubResource("AnimationLibrary_main")

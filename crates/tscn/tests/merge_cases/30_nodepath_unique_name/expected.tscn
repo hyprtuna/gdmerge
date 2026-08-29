@@ -2,14 +2,9 @@
 
 [node name="Panel" type="Control"]
 
-<<<<<<< ours
 [node name="Spinner" type="VBoxContainer" parent="."]
 unique_name_in_owner = true
-=======
-[node name="Spin" type="VBoxContainer" parent="."]
-unique_name_in_owner = true
->>>>>>> theirs
 
 [node name="Readout" type="Label" parent="."]
 text = "value"
-source = NodePath("%Spin")
+source = NodePath("%Spinner")

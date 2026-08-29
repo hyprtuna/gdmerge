@@ -4,6 +4,3 @@
 
 [node name="Player" type="CharacterBody2D" parent="."]
 speed = 100.0
-
-[node name="Shadow" type="RemoteTransform2D" parent="."]
-remote_path = NodePath("../Hero")
