@@ -187,7 +187,8 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.2
 [0.3.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.1
 [0.3.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.3.0
 [0.2.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.1

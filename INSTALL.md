@@ -136,7 +136,7 @@ If you use [pre-commit](https://pre-commit.com), add this to your project's
 ```yaml
 repos:
   - repo: https://github.com/hyprtuna/gdmerge
-    rev: v0.3.1
+    rev: v0.3.2
     hooks:
       - id: gdmerge-check
 ```
