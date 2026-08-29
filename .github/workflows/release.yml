@@ -133,19 +133,47 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # A version already on crates.io is left alone, so re-running a release,
+      # or cutting one that was published by hand, stays green instead of
+      # failing on a duplicate upload.
+      - name: Work out what still needs publishing
+        id: needed
+        shell: bash
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 |
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          any=false
+          for crate in tscn gdmerge; do
+            # crates.io rejects requests without a User-Agent.
+            if curl -sf -A "gdmerge-release-workflow" \
+              "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
+              echo "$crate $version is already published"
+              echo "$crate=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "$crate $version needs publishing"
+              echo "$crate=true" >> "$GITHUB_OUTPUT"
+              any=true
+            fi
+          done
+          echo "any=$any" >> "$GITHUB_OUTPUT"
+
       - name: Exchange the OIDC token for a crates.io token
+        if: steps.needed.outputs.any == 'true'
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
       # tscn first: gdmerge depends on it by version, and cargo waits for the
       # new version to reach the index before returning.
       - name: Publish tscn
+        if: steps.needed.outputs.tscn == 'true'
         shell: bash
         run: cargo publish -p tscn --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish gdmerge
+        if: steps.needed.outputs.gdmerge == 'true'
         shell: bash
         run: cargo publish -p gdmerge --locked
         env:
