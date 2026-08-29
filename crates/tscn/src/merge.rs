@@ -306,12 +306,13 @@ pub fn merge(
 }
 
 /// Finds NodePaths in the merged file that name nothing, and turns each into a
-/// conflict on whatever is responsible.
+/// conflict at the entity holding the path.
 ///
-/// A path left behind by a rename is blamed on the rename, which is the change
-/// that broke it and the one with two sides to choose between. Anything else is
-/// reported without markers: there is no choice to offer, only a file that
-/// needs a path fixed by hand.
+/// The holder is the right place for it: it is where the broken path is written
+/// and where somebody has to make a decision, so that is what the conflict
+/// markers wrap and what the two sides are laid out for. A rename that caused
+/// the break is named in the detail rather than blamed with its own markers,
+/// because the rename itself is not in dispute.
 fn stale_references(
     text: &str,
     align: &Alignment,
@@ -321,6 +322,7 @@ fn stale_references(
     plan: &mut HashMap<EntityId, Res>,
 ) -> Vec<Conflict> {
     let Ok(doc) = Document::parse(text) else { return Vec::new() };
+    let merged = Scene::new(&doc);
     // A reference that was already broken before anyone touched the file is not
     // this merge's doing, and conflicting on it would block work nobody caused.
     // check still reports it.
@@ -331,7 +333,7 @@ fn stale_references(
         .collect();
     let renames: HashMap<String, String> = align.renames().into_iter().collect();
     let mut conflicts = Vec::new();
-    let mut blamed: HashSet<EntityId> = HashSet::new();
+    let mut marked: HashSet<EntityId> = HashSet::new();
 
     for (reference, outcome) in findings(&doc) {
         if inherited.contains(&format!("{}\u{0}{}", reference.site.describe(), reference.path)) {
@@ -344,51 +346,54 @@ fn stale_references(
             Resolution::UnknownUniqueName { name, supplied_elsewhere: false } => name,
             _ => continue,
         };
-        let detail = format!(
-            "NodePath(\"{}\") in {} still points at \"{}\"",
-            reference.path,
-            reference.site.describe(),
-            target
-        );
-        // When the entity reported is the site itself, the detail should not
-        // repeat it back.
-        let alone = format!(
-            "NodePath(\"{}\") points at \"{}\", which the merge removes",
-            reference.path, target
-        );
         // Did a branch rename this very node out from under the reference?
-        match renames.get(&target) {
-            Some(now) => {
-                let id = EntityId::Node(now.clone());
-                if !blamed.insert(id.clone()) {
-                    continue;
-                }
-                // Only a node both branches still have can be shown as two
-                // sides; otherwise fall through to the plain report.
-                if vo.section(&id).is_some() && vt.section(&id).is_some() {
-                    plan.insert(id.clone(), Res::Conflict);
-                    conflicts.push(Conflict {
-                        entity: vo.describe(&id),
-                        detail: format!("renamed to \"{now}\", but {detail}"),
-                        key: Some("name".to_string()),
-                        rows: Vec::new(),
-                    });
-                    continue;
-                }
-                conflicts.push(Conflict {
-                    entity: format!("node {now}"),
-                    detail,
-                    key: None,
-                    rows: Vec::new(),
-                });
-            }
-            None => conflicts.push(Conflict {
+        let detail = match renames.get(&target) {
+            Some(now) => format!(
+                "NodePath(\"{}\") points at \"{}\", which a branch renamed to \"{now}\"",
+                reference.path, target
+            ),
+            None => format!(
+                "NodePath(\"{}\") points at \"{}\", which the merge removes",
+                reference.path, target
+            ),
+        };
+        let key = reference.site.key();
+        let holder = merged.id_of(reference.section).clone();
+
+        // Wrap the entity the path is written in, so the markers land where the
+        // decision has to be made, and lay its items out so the two candidates
+        // can be shown. An entity that is not in the plan, or that neither side
+        // still has, cannot be marked without inventing one; that is reported
+        // without markers, as before.
+        let showable = plan.contains_key(&holder)
+            && (vo.section(&holder).is_some() || vt.section(&holder).is_some());
+        if !showable {
+            conflicts.push(Conflict {
                 entity: reference.site.describe(),
-                detail: alone,
+                detail,
                 key: None,
                 rows: Vec::new(),
-            }),
+            });
+            continue;
         }
+
+        // One entity gets one set of markers however many paths it strands,
+        // but every stranded path is still reported.
+        if marked.insert(holder.clone()) {
+            plan.insert(holder.clone(), Res::Conflict);
+        }
+        let mut rows = conflict_rows(vb, vo, vt, &holder);
+        // The item holding the path is the one to resolve, even where the two
+        // branches happen to spell it the same way.
+        for row in rows.iter_mut().filter(|r| r.key == key) {
+            row.differs = true;
+        }
+        conflicts.push(Conflict {
+            entity: reference.site.describe(),
+            detail,
+            key: Some(key),
+            rows,
+        });
     }
     conflicts
 }

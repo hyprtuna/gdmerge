@@ -349,3 +349,57 @@ fn an_ambiguous_path_is_left_alone() {
     let kept = outcome.text.contains("NodePath(\"Thing\")");
     assert!(kept || !outcome.is_clean(), "either left alone or conflicted:\n{}", outcome.text);
 }
+
+/// A stranded path is something a person has to resolve, so it has to arrive
+/// looking like a conflict: markers around the entity that holds the path, and
+/// the two candidates laid out. Before 0.3.2 the merged text carried no markers
+/// at all for this and the conflict came with no rows, so `gdmerge mergetool`
+/// printed an empty table and only stderr said anything had gone wrong.
+#[test]
+fn a_stranded_path_is_marked_at_the_entity_holding_it() {
+    let base = format!(
+        "{HEADER}[node name=\"Level\" type=\"Node2D\"]\n\n\
+         [node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]\n\n\
+         [node name=\"Shadow\" type=\"RemoteTransform2D\" parent=\".\"]\n\
+         update_rotation = true\n"
+    );
+    // One branch removes the node, the other starts pointing at it. Each file
+    // is sound on its own; only the merge of the two strands the path.
+    let ours = base.replace("[node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]\n\n", "");
+    let theirs = format!("{base}remote_path = NodePath(\"../Hero\")\n");
+
+    let outcome = tscn::merge(
+        &Document::parse(&base).unwrap(),
+        &Document::parse(&ours).unwrap(),
+        &Document::parse(&theirs).unwrap(),
+        &MergeOptions::default(),
+    );
+
+    assert_eq!(outcome.conflicts.len(), 1, "{:?}", outcome.conflicts);
+    let conflict = &outcome.conflicts[0];
+    assert_eq!(conflict.entity, "remote_path on node \"Shadow\"");
+    assert!(conflict.detail.contains("../Hero"), "{}", conflict.detail);
+
+    // The markers wrap the node the path is written in, not the whole file.
+    assert!(outcome.text.contains("<<<<<<< ours"), "no markers:\n{}", outcome.text);
+    assert!(outcome.text.contains(">>>>>>> theirs"), "{}", outcome.text);
+    assert!(
+        outcome.text.contains("[node name=\"Level\" type=\"Node2D\"]\n\n<<<<<<<"),
+        "{}",
+        outcome.text
+    );
+
+    // And the two candidates are there to choose between, with the item that
+    // has to be resolved marked even though only one side wrote it.
+    assert_eq!(conflict.key.as_deref(), Some("remote_path"));
+    let row = conflict
+        .rows
+        .iter()
+        .find(|r| r.key == "remote_path")
+        .expect("a row for the property holding the path");
+    assert!(row.differs, "the stranded item must be the one marked to resolve");
+    assert_eq!(row.ours, None);
+    assert_eq!(row.theirs.as_deref(), Some("NodePath(\"../Hero\")"));
+    // Context rows are kept, and not marked.
+    assert!(conflict.rows.iter().any(|r| r.key == "update_rotation" && !r.differs));
+}

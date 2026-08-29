@@ -105,7 +105,7 @@ would collide gets a new one.
 | `load_steps` disagreeing between branches | recomputed from the merged file |
 | Both branches set the *same* property to different values | **conflict**, markers around that node only |
 | Both branches rename one node to different names | **conflict**, markers around that node only |
-| A merge would leave a `NodePath` naming a node that is gone | **conflict**, with the stranded path named |
+| A merge would leave a `NodePath` naming a node that is gone | **conflict**, markers around the node holding the path, which is named along with the path |
 | One branch deletes a node the other edited | **conflict**, markers around that node only |
 | Both branches change one sub-resource differently | both kept; **conflict** at the node that references it |
 | A file gdmerge cannot parse | hands the whole merge to `git merge-file` and returns its exit status |

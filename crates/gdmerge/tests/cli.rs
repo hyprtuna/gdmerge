@@ -742,3 +742,56 @@ fn the_driver_falls_back_to_git_when_gdmerge_is_not_installed() {
     assert!(merged.contains("uid://tex_player"), "our side is missing:\n{merged}");
     assert!(merged.contains("uid://snd_step"), "their side is missing:\n{merged}");
 }
+
+/// A merge that strands a `NodePath` has to reach the user the same way any
+/// other conflict does: markers in the file and a table with the row to
+/// resolve. Before 0.3.2 the file came back clean-looking and the table empty.
+const STRAND_BASE: &str = "\
+[gd_scene format=3 uid=\"uid://strand\"]
+
+[node name=\"Level\" type=\"Node2D\"]
+
+[node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]
+
+[node name=\"Shadow\" type=\"RemoteTransform2D\" parent=\".\"]
+update_rotation = true
+";
+
+#[test]
+fn mergetool_shows_the_row_for_a_stranded_node_path() {
+    let s = Scratch::new("mergetool-strand");
+    let b = s.write("base.tscn", STRAND_BASE);
+    let o = s.write(
+        "ours.tscn",
+        &STRAND_BASE.replace("[node name=\"Hero\" type=\"CharacterBody2D\" parent=\".\"]\n\n", ""),
+    );
+    let t = s.write("theirs.tscn", &format!("{STRAND_BASE}remote_path = NodePath(\"../Hero\")\n"));
+    let m = s.write("merged.tscn", "");
+
+    // Each input is sound on its own; only the merge strands the path.
+    for input in [&b, &o, &t] {
+        assert!(check_errors(input).is_empty(), "{}: {:?}", input.display(), check_errors(input));
+    }
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    assert!(text.contains("Conflict 1 of 1: remote_path on node \"Shadow\""), "{text}");
+    let row = text
+        .lines()
+        .find(|l| l.trim_start().starts_with('>') && l.contains("remote_path"))
+        .unwrap_or_else(|| panic!("no marked remote_path row in:\n{text}"));
+    assert!(row.contains("NodePath(\"../Hero\")"), "{row}");
+
+    // The file it wrote carries the markers, around that node only.
+    let written = std::fs::read_to_string(&m).expect("merged file written");
+    assert!(written.contains("<<<<<<< ours"), "{written}");
+    assert!(written.contains(">>>>>>> theirs"), "{written}");
+    assert!(written.contains("[node name=\"Level\" type=\"Node2D\"]\n\n<<<<<<<"), "{written}");
+}

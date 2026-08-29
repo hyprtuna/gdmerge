@@ -20,6 +20,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   handed to `git merge-file` like an unparseable one: byte-identical output, git's exit status, and
   one line on stderr naming the file and the reason. `gdmerge mergetool` applies the same guard,
   since it redoes the merge and overwrites the conflicted file.
+- A merge that strands a `NodePath` now writes conflict markers. It was reported on stderr and by
+  `check`, but the merged file itself came back with nothing in it to stop a commit, and
+  `gdmerge mergetool` printed an empty table for it. The conflict is now raised at the entity holding
+  the path: markers wrap that section, and the two sides of the item at fault are laid out like any
+  other conflict, with the stranded path named. This makes the README's "conflict markers wrap the
+  affected section" true of this case as well.
 - A missing `gdmerge` binary no longer loses one side of a merge. With the driver configured and
   the binary not on the `PATH` git sees, git left the file conflicted holding only our side, with no
   conflict markers in it, so `git add` discarded the other side without a word. `gdmerge git-install`

@@ -58,6 +58,18 @@ impl Site {
             Site::Editable => "an [editable] path".to_string(),
         }
     }
+
+    /// The header field or property holding the path, so a conflict can point
+    /// at the row that has to be resolved.
+    pub(crate) fn key(&self) -> String {
+        match self {
+            Site::NodeProperty { property, .. } | Site::SubResourceProperty { property, .. } => {
+                property.clone()
+            }
+            Site::Connection { field, .. } => (*field).to_string(),
+            Site::Editable => "path".to_string(),
+        }
+    }
 }
 
 /// Whether the scene root is a sensible thing to measure a path from.
@@ -78,6 +90,10 @@ pub(crate) fn root_is_plausible(path: &str) -> bool {
 #[derive(Debug, Clone)]
 pub(crate) struct Reference {
     pub(crate) site: Site,
+    /// Index of the section holding this path, in `doc.sections`. It is what
+    /// lets a merge put conflict markers around the entity at fault rather than
+    /// only naming it.
+    pub(crate) section: usize,
     pub(crate) path: String,
     /// A path is accepted if it resolves from any of these. Sub-resources are
     /// shared, so one can genuinely have several.
@@ -200,7 +216,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
     let sub_bases = sub_resource_bases(doc);
     let mut out = Vec::new();
 
-    for s in &doc.sections {
+    for (index, s) in doc.sections.iter().enumerate() {
         match s.kind {
             SectionKind::Node => {
                 let base = node_path(s);
@@ -208,6 +224,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
                 for p in &s.props {
                     collect(&p.value, &mut |path| {
                         out.push(Reference {
+                            section: index,
                             site: Site::NodeProperty {
                                 node: base.clone(),
                                 property: p.key.clone(),
@@ -232,6 +249,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
                 for p in &s.props {
                     collect(&p.value, &mut |path| {
                         out.push(Reference {
+                            section: index,
                             site: Site::SubResourceProperty {
                                 id: id.to_string(),
                                 property: p.key.clone(),
@@ -248,6 +266,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
                 for field in ["from", "to"] {
                     if let Some(value) = s.field_str(field) {
                         out.push(Reference {
+                            section: index,
                             site: Site::Connection { field, from: from.clone(), to: to.clone() },
                             path: value.to_string(),
                             bases: vec![".".to_string()],
@@ -258,6 +277,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
                 if let Some(binds) = s.field("binds") {
                     collect(&binds.value, &mut |path| {
                         out.push(Reference {
+                            section: index,
                             site: Site::Connection {
                                 field: "binds",
                                 from: from.clone(),
@@ -272,6 +292,7 @@ pub(crate) fn references(doc: &Document) -> Vec<Reference> {
             SectionKind::Editable => {
                 if let Some(path) = s.field_str("path") {
                     out.push(Reference {
+                        section: index,
                         site: Site::Editable,
                         path: path.to_string(),
                         bases: vec![".".to_string()],
