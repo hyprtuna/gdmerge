@@ -434,7 +434,8 @@ fn the_mergetool_table_shows_a_renumbered_id_whole() {
                 [node name=\"Root\" type=\"Node2D\"]\n\n\
                 [node name=\"A\" type=\"CollisionShape2D\" parent=\".\"]\n\
                 shape = SubResource(\"1_s\")\n\
-                data = PackedFloat32Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)\n\n\
+                data = PackedFloat32Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, \
+                16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35)\n\n\
                 [node name=\"B\" type=\"CollisionShape2D\" parent=\".\"]\n\
                 shape = SubResource(\"1_s\")\n";
     let b = s.write("base.tscn", base);
@@ -459,6 +460,101 @@ fn the_mergetool_table_shows_a_renumbered_id_whole() {
     // A value that really is long is still cut.
     let data = text.lines().find(|l| l.contains("PackedFloat32Array")).expect("a data row");
     assert!(data.contains("..."), "{data}");
+}
+
+/// The bound every rendered value keeps to, as `show.rs` declares it. A report
+/// line holds two values, a table line three, plus the fixed parts around them.
+const MAX_SHOWN: usize = 120;
+
+/// A scene like godot-demo-projects' `exploration.tscn`: one property holding a
+/// whole tile map. A conflict on that node, whether on the map itself or on a
+/// small property beside it, has to produce a report a terminal can show. 0.3.4
+/// printed the map whole: a 6,775-character stderr line and a 10,131-character
+/// table row for a 3,348-character map, and worse for bigger ones.
+fn tile_map_scene(map: &str, y_sort_origin: &str) -> String {
+    format!(
+        "[gd_scene format=3 uid=\"uid://tilemap\"]\n\n\
+         [node name=\"Exploration\" type=\"Node2D\"]\n\n\
+         [node name=\"Ground\" type=\"TileMapLayer\" parent=\".\"]\n\
+         y_sort_origin = {y_sort_origin}\n\
+         tile_map_data = PackedByteArray(\"{map}\")\n"
+    )
+}
+
+fn long_map(seed: u8) -> String {
+    let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    (0..16340u32)
+        .map(|i| {
+            alphabet[((i.wrapping_mul(31).wrapping_add(u32::from(seed))) % 64) as usize] as char
+        })
+        .collect()
+}
+
+#[test]
+fn conflict_reports_stay_bounded_on_a_huge_property() {
+    let s = Scratch::new("bounded-map");
+    let b = s.write("base.tscn", &tile_map_scene(&long_map(0), "0"));
+    let o = s.write("ours.tscn", &tile_map_scene(&long_map(1), "0"));
+    let t = s.write("theirs.tscn", &tile_map_scene(&long_map(2), "0"));
+    let m = s.write("merged.tscn", "");
+
+    let out = merge_to_stdout(&b, &o, &t);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    for line in err.lines() {
+        assert!(
+            line.chars().count() <= 2 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    assert!(err.contains("PackedByteArray(\"...\") (16340 chars elided)"), "{err}");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    for line in stdout(&out).lines() {
+        assert!(
+            line.chars().count() <= 3 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+}
+
+/// Every row of the conflicting node is rendered, so the map bounds the table
+/// even when the disagreement is about something small next to it.
+#[test]
+fn a_small_conflict_beside_a_huge_property_stays_bounded() {
+    let s = Scratch::new("bounded-neighbour");
+    let b = s.write("base.tscn", &tile_map_scene(&long_map(0), "0"));
+    let o = s.write("ours.tscn", &tile_map_scene(&long_map(0), "4"));
+    let t = s.write("theirs.tscn", &tile_map_scene(&long_map(0), "8"));
+    let m = s.write("merged.tscn", "");
+
+    let out = gdmerge(&[
+        "mergetool",
+        b.to_str().unwrap(),
+        o.to_str().unwrap(),
+        t.to_str().unwrap(),
+        m.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = stdout(&out);
+    for line in text.lines() {
+        assert!(
+            line.chars().count() <= 3 * MAX_SHOWN + 64,
+            "{} chars: {line}",
+            line.chars().count()
+        );
+    }
+    let row = text.lines().find(|l| l.trim_start().starts_with('>')).expect("a marked row");
+    assert!(row.contains("y_sort_origin"), "{row}");
 }
 
 // ---------------------------------------------------------------------------

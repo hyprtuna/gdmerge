@@ -8,6 +8,7 @@ mod io;
 mod merge;
 mod mergetool;
 mod report;
+mod show;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
