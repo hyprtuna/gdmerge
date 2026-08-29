@@ -1149,6 +1149,45 @@ fn a_pre_existing_broken_reference_hands_the_merge_to_git() {
     assert!(stdout(&out).contains("name=\"Other\""), "{}", stdout(&out));
 }
 
+/// Under the driver the inputs are git's temporary files, `.merge_file_XXXXXX`,
+/// and a message naming one of those tells nobody which scene is meant. git
+/// passes the scene's path as `%P` for exactly this; it was parsed and never
+/// read, from 0.3.1 through 0.3.4.
+#[test]
+fn the_driver_names_the_scene_not_gits_temporary_file() {
+    let s = Scratch::new("driver-pathname");
+    let dir = s.path();
+    assert!(git(dir, &["init", "-q", "-b", "main"]).status.success());
+    assert!(git(dir, &["config", "user.name", "Test"]).status.success());
+    assert!(git(dir, &["config", "user.email", "test@example.invalid"]).status.success());
+    std::fs::create_dir_all(dir.join("scenes")).unwrap();
+    std::fs::write(dir.join("scenes/level.tscn"), LEGACY_BASE).unwrap();
+    assert!(git(dir, &["add", "."]).status.success());
+    assert!(git(dir, &["commit", "-qm", "base"]).status.success());
+
+    assert!(git(dir, &["checkout", "-qb", "bigger"]).status.success());
+    std::fs::write(dir.join("scenes/level.tscn"), legacy_extents("Vector2( 10, 10 )")).unwrap();
+    assert!(git(dir, &["commit", "-qam", "bigger"]).status.success());
+
+    assert!(git(dir, &["checkout", "-q", "main"]).status.success());
+    std::fs::write(dir.join("scenes/level.tscn"), legacy_position("Vector2( 5, 5 )")).unwrap();
+    assert!(git(dir, &["commit", "-qam", "moved"]).status.success());
+
+    let install = Command::new(BIN).current_dir(dir).arg("git-install").output().unwrap();
+    assert!(install.status.success(), "{}", String::from_utf8_lossy(&install.stderr));
+
+    let out = git(dir, &["merge", "--no-edit", "bigger"]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("falling back to a text merge (scenes/level.tscn, base version:"),
+        "{err}"
+    );
+    assert!(err.contains("Godot 3 unquoted id form"), "{err}");
+    assert!(!err.contains(".merge_file_"), "git's temporary file must not be named: {err}");
+    // And the merge itself went through git's text merge, cleanly for this pair.
+    assert!(out.status.success(), "{err}");
+}
+
 /// The driver is configured per repository and committed as `.gitattributes`,
 /// so a teammate who has not installed gdmerge still has git calling it. If
 /// that call simply fails, git leaves `%A` holding only our side, marks the

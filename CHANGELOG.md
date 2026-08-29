@@ -23,6 +23,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `gdmerge diff` shows values under the same rule. It cut every value at 72 characters, inside a
   quoted string included, so an id near the cut came out as
   `SubResource("RectangleShape2D_with_a_really_extremely_long_identifier...`.
+- The driver names the scene, not git's temporary file. When git runs the merge driver, the three
+  inputs are files such as `.merge_file_sFbY6M`, and that is what the fallback message named:
+  `falling back to a text merge (.merge_file_sFbY6M: ...)`. git passes the scene's own path as
+  `%P` for exactly this; the driver has been given it since 0.3.1 and never read it. The message
+  now reads `falling back to a text merge (scenes/level.tscn, base version: ...)`, which makes
+  INSTALL's "the message names the file and the reason" true on the driver path as well.
 
 ## [0.3.4] - 2026-08-29
 
