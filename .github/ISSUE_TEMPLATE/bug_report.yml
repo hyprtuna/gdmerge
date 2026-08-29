@@ -1,0 +1,74 @@
+name: Bug report
+description: Report incorrect merge/diff behavior or a crash in gdmerge
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the incorrect behavior or crash.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: What the correct diff/merge result should have been.
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Exact gdmerge command run
+      description: The full command line, including any flags, as it was invoked (directly or via the git merge driver).
+      placeholder: gdmerge merge --base base.tscn --ours ours.tscn --theirs theirs.tscn --output out.tscn
+    validations:
+      required: true
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Scene/resource files involved
+      description: >
+        Attach the three files involved in the merge/diff: the base (common ancestor) version, the
+        "ours" version, and the "theirs" version of the .tscn or .tres file. Drag and drop the files
+        into this box, or a .zip containing them. Reports without these files usually cannot be
+        reproduced or fixed.
+      placeholder: Drag and drop base.tscn, ours.tscn, and theirs.tscn (or a zip of the three) here.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: gdmerge --version output
+      placeholder: gdmerge 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: godot-version
+    attributes:
+      label: Godot version
+      placeholder: 4.2.1.stable
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Ubuntu 24.04, macOS 14, Windows 11
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Consent
+      options:
+        - label: I confirm the attached files can be shared publicly in this issue.
+          required: true
