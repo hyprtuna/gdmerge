@@ -1,0 +1,26 @@
+# Hooks for https://pre-commit.com
+#
+# gdmerge has to be on PATH. If you are using it as a git merge driver you
+# already have it; otherwise `cargo install gdmerge` or take a binary from the
+# releases page. Building it from source here instead is not offered because
+# this repository is a cargo workspace, and pre-commit's rust support installs
+# the repository root, which a workspace root cannot be.
+#
+# Usage, in your project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/hyprtuna/gdmerge
+#       rev: v0.3.0
+#       hooks:
+#         - id: gdmerge-check
+
+- id: gdmerge-check
+  name: gdmerge check
+  description: >
+    Parse every changed Godot 4 scene and resource file, prove it round trips
+    byte for byte, and validate its structure: dangling resource references,
+    duplicate ids, orphaned nodes, and node paths that name nothing.
+  entry: gdmerge check
+  language: system
+  files: \.(tscn|tres)$
+  types: [file]
