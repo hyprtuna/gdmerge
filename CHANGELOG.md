@@ -7,6 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Conflict reports are bounded again. 0.3.4 set out to stop cutting ids short and removed the
+  limit on rendered values instead: the driver's stderr and the `gdmerge mergetool` table printed
+  any single value whole, so a conflict on a `TileMapLayer` node from godot-demo-projects, whose
+  `tile_map_data` runs to thousands of characters, produced a stderr line and a table row of that
+  size, and a conflict on any small property of such a node did the same because every row of the
+  node is rendered. A rendered value is now at most 120 characters, and the cut never lands inside
+  a quoted string: an id is short and comes out whole, and a long string is replaced by `"..."`
+  with the number of characters left out and the type kept around it, as in
+  `PackedByteArray("...") (16340 chars elided)`. The rule is one function every report goes
+  through, with a seeded property test over long quoted and unquoted values holding it to the
+  bound.
+
 ## [0.3.4] - 2026-08-29
 
 ### Changed
