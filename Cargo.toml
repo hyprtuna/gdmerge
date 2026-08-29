@@ -1,5 +1,7 @@
 [workspace]
 members = ["crates/tscn", "crates/gdmerge"]
+# The fuzz targets need nightly and a sanitizer; they are built on their own.
+exclude = ["fuzz"]
 resolver = "2"
 
 [workspace.package]

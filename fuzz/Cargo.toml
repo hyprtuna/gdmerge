@@ -1,0 +1,42 @@
+# Deliberately its own workspace: the fuzz targets need a nightly toolchain and
+# a sanitizer, so they must not be pulled into a normal `cargo build` at the
+# repository root.
+[package]
+name = "tscn-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.tscn]
+path = "../crates/tscn"
+features = ["fuzzing"]
+
+[[bin]]
+name = "lex"
+path = "fuzz_targets/lex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "value"
+path = "fuzz_targets/value.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "document"
+path = "fuzz_targets/document.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

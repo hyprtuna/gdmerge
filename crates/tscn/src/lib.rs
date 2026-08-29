@@ -18,6 +18,9 @@ mod check;
 mod diff;
 mod doc;
 mod error;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzz;
 mod lex;
 mod merge;
 mod scene;
