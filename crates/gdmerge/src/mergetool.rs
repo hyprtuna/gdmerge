@@ -23,27 +23,43 @@ pub fn run(
     let (base_src, ours_src, theirs_src) = (io::read(base)?, io::read(ours)?, io::read(theirs)?);
     let parsed =
         (Document::parse(&base_src), Document::parse(&ours_src), Document::parse(&theirs_src));
+    let text_merge = || -> Result<i32> {
+        let r = fallback::merge_file(
+            base,
+            ours,
+            theirs,
+            opts.marker_size,
+            &opts.ours_label,
+            &opts.theirs_label,
+        )?;
+        io::write_atomic(destination, &r.text)?;
+        Ok(if r.conflicts > 0 { EXIT_CONFLICT } else { 0 })
+    };
+
     let (b, o, t) = match parsed {
         (Ok(b), Ok(o), Ok(t)) => (b, o, t),
         (b, o, t) => {
-            let why = [("base", b.err()), ("ours", o.err()), ("theirs", t.err())]
+            let why = [(base, b.err()), (ours, o.err()), (theirs, t.err())]
                 .into_iter()
-                .find_map(|(name, e)| e.map(|e| format!("{name}: {e}")))
+                .find_map(|(path, e)| e.map(|e| format!("{}: {e}", path.display())))
                 .unwrap_or_default();
             println!("gdmerge cannot read one of these files ({why}).");
             println!("Falling back to a text merge; resolve it by hand.");
-            let r = fallback::merge_file(
-                base,
-                ours,
-                theirs,
-                opts.marker_size,
-                &opts.ours_label,
-                &opts.theirs_label,
-            )?;
-            io::write_atomic(destination, &r.text)?;
-            return Ok(if r.conflicts > 0 { EXIT_CONFLICT } else { 0 });
+            return text_merge();
         }
     };
+
+    // The mergetool redoes the merge and overwrites the conflicted file, so it
+    // needs the same guard `merge` has: an input the semantic merge cannot be
+    // trusted with goes to git's text merge here too.
+    let invalid = [(base, &b, &base_src), (ours, &o, &ours_src), (theirs, &t, &theirs_src)]
+        .into_iter()
+        .find_map(|(path, doc, src)| fallback::structural_error(doc, src).map(|why| (path, why)));
+    if let Some((path, why)) = invalid {
+        println!("gdmerge cannot merge these files safely ({}: {why}).", path.display());
+        println!("Falling back to a text merge; resolve it by hand.");
+        return text_merge();
+    }
 
     let outcome = tscn::merge(&b, &o, &t, opts);
     io::write_atomic(destination, &outcome.text)?;

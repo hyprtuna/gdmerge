@@ -516,3 +516,185 @@ fn git_mergetool_explains_a_real_conflict() {
     assert!(text.contains("250.0"), "{text}");
     assert!(text.contains("400.0"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Godot 3 input. gdmerge does not understand it, so every one of these has to
+// come out exactly as `git merge-file` would have left it.
+// ---------------------------------------------------------------------------
+
+/// The giveaway is the unquoted resource id, not `format=2`: Godot 3 wrote
+/// `id=1` and `SubResource( 1 )`, neither of which gdmerge can renumber.
+const LEGACY_BASE: &str = "\
+[gd_scene load_steps=2 format=2]
+
+[sub_resource type=\"RectangleShape2D\" id=1]
+extents = Vector2( 8, 8 )
+
+[node name=\"Root\" type=\"Node2D\"]
+
+[node name=\"Body\" type=\"CollisionShape2D\" parent=\".\"]
+position = Vector2( 0, 0 )
+shape = SubResource( 1 )
+";
+
+fn legacy_extents(v: &str) -> String {
+    LEGACY_BASE.replace("Vector2( 8, 8 )", v)
+}
+
+fn legacy_position(v: &str) -> String {
+    LEGACY_BASE.replace("position = Vector2( 0, 0 )", &format!("position = {v}"))
+}
+
+/// Runs the text merge gdmerge is supposed to be indistinguishable from, with
+/// the same flags and labels its fallback uses.
+fn git_merge_file(ours: &Path, base: &Path, theirs: &Path) -> (String, Option<i32>) {
+    let out = Command::new("git")
+        .args(["merge-file", "-p", "--diff3", "--marker-size=7"])
+        .args(["-L", "ours", "-L", "base", "-L", "theirs"])
+        .args([ours, base, theirs])
+        .output()
+        .expect("running git merge-file");
+    (stdout(&out), out.status.code())
+}
+
+fn merge_to_stdout(base: &Path, ours: &Path, theirs: &Path) -> Output {
+    gdmerge(&[
+        "merge",
+        "--base",
+        base.to_str().unwrap(),
+        "--ours",
+        ours.to_str().unwrap(),
+        "--theirs",
+        theirs.to_str().unwrap(),
+    ])
+}
+
+/// Every error `gdmerge check` reports for one file.
+fn check_errors(path: &Path) -> Vec<String> {
+    let out = gdmerge(&["check", "--json", path.to_str().unwrap()]);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
+    parsed[0]["issues"]
+        .as_array()
+        .map(|issues| {
+            issues
+                .iter()
+                .filter(|i| i["severity"] == "error")
+                .map(|i| i["message"].as_str().unwrap_or_default().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_legacy_clean_merge_is_byte_identical_to_git_merge_file() {
+    let s = Scratch::new("legacy-clean");
+    let b = s.write("base.tscn", LEGACY_BASE);
+    let o = s.write("ours.tscn", &legacy_extents("Vector2( 10, 10 )"));
+    let t = s.write("theirs.tscn", &legacy_position("Vector2( 5, 5 )"));
+
+    let out = merge_to_stdout(&b, &o, &t);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("falling back to a text merge"), "{err}");
+    assert!(err.contains("base.tscn"), "the message has to name the file: {err}");
+    assert!(err.contains("Godot 3 unquoted id form"), "the message has to say why: {err}");
+
+    let (expected, expected_code) = git_merge_file(&o, &b, &t);
+    assert_eq!(out.status.code(), expected_code);
+    assert_eq!(stdout(&out), expected, "the fallback must reproduce git's own merge exactly");
+    // And what git produced is what the pre-0.3.2 semantic path silently broke:
+    // one id renumbered, the reference to it left behind.
+    assert!(stdout(&out).contains("shape = SubResource( 1 )"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("id=1]"), "{}", stdout(&out));
+}
+
+#[test]
+fn a_legacy_conflict_is_byte_identical_to_git_merge_file() {
+    let s = Scratch::new("legacy-conflict");
+    let b = s.write("base.tscn", LEGACY_BASE);
+    let o = s.write("ours.tscn", &legacy_extents("Vector2( 10, 10 )"));
+    let t = s.write("theirs.tscn", &legacy_extents("Vector2( 24, 24 )"));
+
+    let out = merge_to_stdout(&b, &o, &t);
+    let (expected, expected_code) = git_merge_file(&o, &b, &t);
+    assert_eq!(expected_code, Some(1), "the fixture is supposed to conflict in git's own terms");
+    assert_eq!(out.status.code(), expected_code, "git's exit status has to be passed through");
+    assert_eq!(stdout(&out), expected, "the conflict markers must be git's own, byte for byte");
+    assert!(stdout(&out).contains("<<<<<<< ours"), "{}", stdout(&out));
+}
+
+/// The trigger is the id spelling, not the `format` number. A file that claims
+/// `format=3` and still writes Godot 3 ids has to take the same path.
+#[test]
+fn unquoted_ids_in_a_format_3_file_take_the_same_path() {
+    let s = Scratch::new("legacy-format3");
+    let modern = |src: &str| src.replace("format=2", "format=3");
+    let b = s.write("base.tscn", &modern(LEGACY_BASE));
+    let o = s.write("ours.tscn", &modern(&legacy_extents("Vector2( 10, 10 )")));
+    let t = s.write("theirs.tscn", &modern(&legacy_position("Vector2( 5, 5 )")));
+
+    let out = merge_to_stdout(&b, &o, &t);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("falling back to a text merge"), "{err}");
+    let (expected, expected_code) = git_merge_file(&o, &b, &t);
+    assert_eq!(out.status.code(), expected_code);
+    assert_eq!(stdout(&out), expected);
+}
+
+/// `check` has to see the legacy reference spelling, or a dangling
+/// `SubResource( 1 )` is invisible and the merge that created it looks clean.
+#[test]
+fn check_reports_a_dangling_unquoted_reference() {
+    let s = Scratch::new("legacy-dangling");
+    let broken = LEGACY_BASE.replace("id=1]", "id=\"RectangleShape2D_x\"]");
+    let f = s.write("broken.tscn", &broken);
+    let out = gdmerge(&["check", f.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).contains("dangling SubResource(\"1\")"), "{}", stdout(&out));
+}
+
+#[test]
+fn check_names_the_legacy_id_form() {
+    let s = Scratch::new("legacy-id");
+    let f = s.write("legacy.tscn", LEGACY_BASE);
+    let out = gdmerge(&["check", f.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(stdout(&out).contains("Godot 3 unquoted id form"), "{}", stdout(&out));
+}
+
+/// The invariant that catches this class of bug: whatever a merge writes must
+/// not be broken in a way its inputs were not. A legacy file is already one
+/// `check` rejects, so the output is allowed to carry the same complaints and
+/// nothing else. The 0.3.1 output failed this: it introduced a dangling
+/// `SubResource( 1 )` that neither input had.
+#[test]
+fn merging_legacy_input_introduces_no_new_breakage() {
+    let s = Scratch::new("legacy-invariant");
+    let b = s.write("base.tscn", LEGACY_BASE);
+    let o = s.write("ours.tscn", &legacy_extents("Vector2( 10, 10 )"));
+    let t = s.write("theirs.tscn", &legacy_position("Vector2( 5, 5 )"));
+    let merged = s.path().join("out.tscn");
+
+    let out = gdmerge(&[
+        "merge",
+        "--base",
+        b.to_str().unwrap(),
+        "--ours",
+        o.to_str().unwrap(),
+        "--theirs",
+        t.to_str().unwrap(),
+        "-O",
+        merged.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+
+    let mut inherited: Vec<String> = Vec::new();
+    for input in [&b, &o, &t] {
+        inherited.extend(check_errors(input));
+    }
+    for error in check_errors(&merged) {
+        assert!(
+            inherited.contains(&error),
+            "the merge introduced an error none of its inputs had: {error}"
+        );
+    }
+}

@@ -216,6 +216,41 @@ impl Value {
         }
     }
 
+    /// Calls `visit` with every `ExtResource`/`SubResource` reference in this
+    /// value, however deeply nested, in either spelling.
+    ///
+    /// The parser records only the quoted form, because that is the only one it
+    /// can rewrite in place. Godot 3 wrote `SubResource( 1 )`, which still has
+    /// to be *seen* so a reference to a resource that is not there is reported
+    /// rather than silently ignored.
+    pub(crate) fn visit_refs(&self, visit: &mut dyn FnMut(RefKind, String)) {
+        match self {
+            Value::Call { name, args } => {
+                if let (Some(kind), [arg]) = (ref_kind(name), args.as_slice()) {
+                    if let Some(id) = id_text(arg) {
+                        visit(kind, id);
+                        return;
+                    }
+                }
+                for a in args {
+                    a.visit_refs(visit);
+                }
+            }
+            Value::Array(items) => items.iter().for_each(|v| v.visit_refs(visit)),
+            Value::TypedArray { items, .. } => items.iter().for_each(|v| v.visit_refs(visit)),
+            Value::Dict(entries) => entries.iter().for_each(|(k, v)| {
+                k.visit_refs(visit);
+                v.visit_refs(visit);
+            }),
+            Value::TypedDict { entries, .. } => entries.iter().for_each(|(k, v)| {
+                k.visit_refs(visit);
+                v.visit_refs(visit);
+            }),
+            Value::Object { props, .. } => props.iter().for_each(|(_, v)| v.visit_refs(visit)),
+            _ => {}
+        }
+    }
+
     /// The string payload of a `"..."` literal, if this is one.
     pub fn as_str(&self) -> Option<&str> {
         match self {
@@ -246,6 +281,24 @@ fn write_entries(
         out.push(':');
         v.write_canonical(out, resolve);
     }
+}
+
+/// The text of a resource id literal, in whichever spelling it is written.
+///
+/// Godot 4 quotes ids (`id="RectangleShape2D_a1b2c"`); Godot 3 wrote bare
+/// integers (`id=1`). Both are rendered to the same text here so a declaration
+/// and a reference to it compare equal whichever form the file uses.
+pub(crate) fn id_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Str(id) => Some(id.clone()),
+        Value::Num(n) => Some(format!("{n}")),
+        _ => None,
+    }
+}
+
+/// True when an id is written the Godot 3 way, as a bare number.
+pub(crate) fn is_legacy_id(value: &Value) -> bool {
+    matches!(value, Value::Num(_))
 }
 
 fn ref_kind(name: &str) -> Option<RefKind> {

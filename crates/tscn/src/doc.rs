@@ -222,6 +222,24 @@ impl Section {
             .chain(self.props.iter().flat_map(|p| p.refs.iter()))
     }
 
+    /// Every resource reference in this section, in either spelling.
+    ///
+    /// [`Section::refs`] carries only the quoted form, since that is the only
+    /// one a merge can rewrite. Validation has to see the Godot 3
+    /// `SubResource( 1 )` spelling too, or a reference to a resource that is
+    /// not in the file goes unreported.
+    pub(crate) fn all_refs(&self) -> Vec<(RefKind, String)> {
+        let mut out = Vec::new();
+        let mut visit = |kind, id| out.push((kind, id));
+        for f in &self.fields {
+            f.value.visit_refs(&mut visit);
+        }
+        for p in &self.props {
+            p.value.visit_refs(&mut visit);
+        }
+        out
+    }
+
     /// Renders the section back to source with the given rewrite applied.
     pub fn render(&self, rewrite: Rewrite<'_>, out: &mut String) {
         out.push('[');
