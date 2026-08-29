@@ -1,9 +1,10 @@
 //! Semantic diff between two documents.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
 
+use crate::align::node_moves;
 use crate::doc::{Document, Section};
 use crate::scene::{EntityId, Scene};
 
@@ -92,7 +93,8 @@ pub(crate) fn diff_scenes(a: &Scene<'_>, b: &Scene<'_>) -> Diff {
     let mut added: Vec<EntityId> = b_ids.difference(&a_ids).cloned().collect();
     let mut changes = Vec::new();
 
-    for (from, to) in detect_moves(a, b, &removed, &added) {
+    for (from_path, to_path) in node_moves(a, b) {
+        let (from, to) = (EntityId::Node(from_path), EntityId::Node(to_path));
         removed.retain(|id| *id != from);
         added.retain(|id| *id != to);
         changes.push(Change::Moved {
@@ -177,64 +179,6 @@ fn section_delta(
         }
     }
     (fields, props)
-}
-
-/// Pairs removed and added nodes whose contents are identical: a rename, a
-/// reparent, or both. Deliberately conservative: contents must match exactly.
-fn detect_moves(
-    a: &Scene<'_>,
-    b: &Scene<'_>,
-    removed: &[EntityId],
-    added: &[EntityId],
-) -> Vec<(EntityId, EntityId)> {
-    let mut by_content: HashMap<String, Vec<&EntityId>> = HashMap::new();
-    for id in added {
-        if !matches!(id, EntityId::Node(_)) {
-            continue;
-        }
-        let Some(i) = b.index_of(id) else { continue };
-        by_content.entry(content_key(b, i)).or_default().push(id);
-    }
-
-    let mut taken: HashSet<&EntityId> = HashSet::new();
-    let mut pairs = Vec::new();
-    for from in removed {
-        if !matches!(from, EntityId::Node(_)) {
-            continue;
-        }
-        let Some(i) = a.index_of(from) else { continue };
-        let Some(candidates) = by_content.get(&content_key(a, i)) else { continue };
-        if let Some(to) = candidates.iter().find(|c| !taken.contains(**c)) {
-            taken.insert(to);
-            pairs.push((from.clone(), (*to).clone()));
-        }
-    }
-    pairs
-}
-
-/// Canonical content of a node ignoring the fields that define its identity.
-fn content_key(scene: &Scene<'_>, index: usize) -> String {
-    let s = &scene.doc.sections[index];
-    let mut out = String::new();
-    let mut fields: Vec<_> = s
-        .fields
-        .iter()
-        .filter(|f| f.name != "name" && f.name != "parent" && f.name != "index")
-        .collect();
-    fields.sort_by(|x, y| x.name.cmp(&y.name));
-    for f in fields {
-        out.push('#');
-        out.push_str(&f.name);
-        out.push('=');
-        out.push_str(scene.canonical_field(s, &f.name).unwrap_or_default().as_str());
-    }
-    for p in &s.props {
-        out.push('\n');
-        out.push_str(&p.key);
-        out.push('=');
-        out.push_str(scene.canonical_prop(s, &p.key).unwrap_or_default().as_str());
-    }
-    out
 }
 
 /// Entities whose position among their own kind changed.

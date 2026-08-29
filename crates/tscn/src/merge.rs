@@ -5,13 +5,18 @@
 //! together; only a genuine collision (the same property changed two ways, a
 //! delete against a modify) becomes a conflict, and the conflict markers wrap
 //! just the entity involved rather than the whole file.
+//!
+//! Before any of that, the three inputs are put into one shared naming, so a
+//! node one branch renamed is recognised as the node the other branch edited.
+//! See [`crate::align`].
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
+use crate::align::{Alignment, Which};
 use crate::diff::diff_scenes;
 use crate::doc::{Document, Section, SectionKind};
-use crate::scene::{EntityId, Scene};
+use crate::scene::{node_path, EntityId, Scene};
 use crate::value::RefKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +48,9 @@ pub struct Conflict {
     /// Human-readable identity of the entity, e.g. `node Player/Sprite2D`.
     pub entity: String,
     pub detail: String,
+    /// The header field or property that could not be reconciled, when the
+    /// conflict came down to one of them.
+    pub key: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +68,59 @@ impl MergeOutcome {
 /// A resource-id rewriting function, applied while rendering a section that
 /// came from one particular side.
 type Remap<'a> = &'a dyn Fn(RefKind, &str) -> Option<String>;
+
+/// Everything needed to replay a section from one side into the merged file:
+/// its resource ids and its node paths both have to be rewritten into the
+/// merged document's naming.
+struct Replay<'a> {
+    ids: Remap<'a>,
+    paths: &'a dyn Fn(&str) -> String,
+}
+
+/// One of the three inputs, addressed by merged identity rather than its own.
+struct View<'a> {
+    scene: Scene<'a>,
+    which: Which,
+    align: &'a Alignment,
+    /// Merged identity to this document's own identity.
+    local: HashMap<EntityId, EntityId>,
+    /// This document's entities in file order, under merged identities.
+    ids: Vec<EntityId>,
+}
+
+impl<'a> View<'a> {
+    fn new(scene: Scene<'a>, which: Which, align: &'a Alignment) -> View<'a> {
+        let mut local = HashMap::new();
+        let mut ids = Vec::new();
+        for id in scene.ids() {
+            let merged = align.id(which, id);
+            local.entry(merged.clone()).or_insert_with(|| id.clone());
+            ids.push(merged);
+        }
+        View { scene, which, align, local, ids }
+    }
+
+    fn ids(&self) -> &[EntityId] {
+        &self.ids
+    }
+
+    fn section(&self, id: &EntityId) -> Option<&'a Section> {
+        self.scene.section(self.local.get(id)?)
+    }
+
+    /// Canonical text of the entity, used to decide whether a side changed it.
+    fn canonical(&self, id: &EntityId) -> Option<String> {
+        let local = self.local.get(id)?;
+        self.scene.index_of(local).map(|i| self.scene.canonical(i))
+    }
+
+    fn describe(&self, id: &EntityId) -> String {
+        match self.local.get(id) {
+            Some(local) => self.scene.describe(local),
+            None => id.describe(),
+        }
+    }
+}
 
 /// One resolved entity in the merged document.
 enum Res {
@@ -97,20 +158,25 @@ pub fn merge(
         return MergeOutcome { text: ours.to_source(), conflicts: Vec::new() };
     }
 
+    let align = Alignment::new(&sb, &so, &st);
+    let vb = View::new(sb, Which::Base, &align);
+    let vo = View::new(so, Which::Ours, &align);
+    let vt = View::new(st, Which::Theirs, &align);
+
     let mut plan: HashMap<EntityId, Res> = HashMap::new();
     let mut conflicts = Vec::new();
 
     let mut all: Vec<EntityId> = Vec::new();
-    for id in so.ids().iter().chain(st.ids()).chain(sb.ids()) {
+    for id in vo.ids().iter().chain(vt.ids()).chain(vb.ids()) {
         if !all.contains(id) {
             all.push(id.clone());
         }
     }
 
     for id in &all {
-        let cb = sb.index_of(id).map(|i| sb.canonical(i));
-        let co = so.index_of(id).map(|i| so.canonical(i));
-        let ct = st.index_of(id).map(|i| st.canonical(i));
+        let cb = vb.canonical(id);
+        let co = vo.canonical(id);
+        let ct = vt.canonical(id);
 
         let res = match (&cb, &co, &ct) {
             (_, None, None) => continue, // Removed by both, or never present.
@@ -119,15 +185,16 @@ pub fn merge(
             (Some(_), Some(_), Some(_)) if cb == ct => Res::Take(Side::Ours),
             (_, Some(_), Some(_)) => {
                 // Both sides changed the same entity: try to merge item by item.
-                let b = sb.section(id);
-                let o = so.section(id).expect("canonical implies a section");
-                let t = st.section(id).expect("canonical implies a section");
-                match merge_items(&sb, b, &so, o, &st, t) {
-                    Some((fields, props)) => Res::Merge { fields, props },
-                    None => {
+                let b = vb.section(id);
+                let o = vo.section(id).expect("canonical implies a section");
+                let t = vt.section(id).expect("canonical implies a section");
+                match merge_items(&vb, b, &vo, o, &vt, t) {
+                    Ok((fields, props)) => Res::Merge { fields, props },
+                    Err(key) => {
                         conflicts.push(Conflict {
-                            entity: so.describe(id),
-                            detail: "changed differently on both sides".to_string(),
+                            entity: vo.describe(id),
+                            detail: clash_detail(&align, &vb, id, &key),
+                            key: Some(key),
                         });
                         Res::Conflict
                     }
@@ -140,8 +207,9 @@ pub fn merge(
                     continue; // They deleted it and we left it alone.
                 }
                 conflicts.push(Conflict {
-                    entity: so.describe(id),
+                    entity: vo.describe(id),
                     detail: "deleted by theirs, modified by ours".to_string(),
+                    key: None,
                 });
                 Res::Conflict
             }
@@ -150,8 +218,9 @@ pub fn merge(
                     continue; // We deleted it and they left it alone.
                 }
                 conflicts.push(Conflict {
-                    entity: st.describe(id),
+                    entity: vt.describe(id),
                     detail: "deleted by ours, modified by theirs".to_string(),
+                    key: None,
                 });
                 Res::Conflict
             }
@@ -159,23 +228,37 @@ pub fn merge(
         plan.insert(id.clone(), res);
     }
 
-    let order = merged_order(&so, &st, &plan);
-    let final_ids = assign_ids(&order, &so, &st);
-    let text = emit(ours, &order, &plan, &so, &st, &final_ids, opts);
+    let order = merged_order(&vo, &vt, &plan);
+    let final_ids = assign_ids(&order, &vo, &vt);
+    let text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
     conflicts.sort_by(|a, b| a.entity.cmp(&b.entity));
     MergeOutcome { text, conflicts }
 }
 
-/// Item-level three-way merge of one section. `None` means a real collision.
+/// Wording for a collision, naming the rename case explicitly because the bare
+/// "name changed differently" reading hides what actually happened.
+fn clash_detail(align: &Alignment, vb: &View<'_>, id: &EntityId, key: &str) -> String {
+    if matches!(key, "name" | "parent") {
+        if let Some(section) = vb.section(id) {
+            if align.is_contested(&node_path(section)) {
+                return "renamed differently on both sides".to_string();
+            }
+        }
+    }
+    format!("{key} changed differently on both sides")
+}
+
+/// Item-level three-way merge of one section. The error names the first header
+/// field or property that could not be reconciled.
 #[allow(clippy::type_complexity)]
 fn merge_items(
-    sb: &Scene<'_>,
+    vb: &View<'_>,
     base: Option<&Section>,
-    so: &Scene<'_>,
+    vo: &View<'_>,
     ours: &Section,
-    st: &Scene<'_>,
+    vt: &View<'_>,
     theirs: &Section,
-) -> Option<(Vec<(String, Side)>, Vec<(String, Side)>)> {
+) -> Result<(Vec<(String, Side)>, Vec<(String, Side)>), String> {
     let mut fields = Vec::new();
     let mut names: Vec<&str> = Vec::new();
     for f in ours.fields.iter().chain(theirs.fields.iter()) {
@@ -185,13 +268,13 @@ fn merge_items(
     }
     for name in names {
         let derived = ours.kind.is_derived_field(name);
-        let b = base.and_then(|s| sb.canonical_field(s, name));
-        let o = so.canonical_field(ours, name);
-        let t = st.canonical_field(theirs, name);
+        let b = base.and_then(|s| canonical_field(vb, s, name));
+        let o = canonical_field(vo, ours, name);
+        let t = canonical_field(vt, theirs, name);
         match pick(derived, &b, &o, &t) {
             Pick::Drop => {}
             Pick::Side(side) => fields.push((name.to_string(), side)),
-            Pick::Clash => return None,
+            Pick::Clash => return Err(name.to_string()),
         }
     }
 
@@ -203,16 +286,45 @@ fn merge_items(
         }
     }
     for key in keys {
-        let b = base.and_then(|s| sb.canonical_prop(s, key));
-        let o = so.canonical_prop(ours, key);
-        let t = st.canonical_prop(theirs, key);
+        let b = base.and_then(|s| vb.scene.canonical_prop(s, key));
+        let o = vo.scene.canonical_prop(ours, key);
+        let t = vt.scene.canonical_prop(theirs, key);
         match pick(false, &b, &o, &t) {
             Pick::Drop => {}
             Pick::Side(side) => props.push((key.to_string(), side)),
-            Pick::Clash => return None,
+            Pick::Clash => return Err(key.to_string()),
         }
     }
-    Some((fields, props))
+    Ok((fields, props))
+}
+
+/// A header field's canonical form, with node paths read in the merged naming.
+///
+/// Without this, a rename on one branch makes `parent="Holder"` and
+/// `parent="Box"` look like a disagreement when they name the same node.
+fn canonical_field(view: &View<'_>, section: &Section, name: &str) -> Option<String> {
+    let raw = view.scene.canonical_field(section, name)?;
+    if !path_field(section.kind, name) {
+        return Some(raw);
+    }
+    let value = section.field_str(name)?;
+    Some(format!("{:?}", view_path(view, value)))
+}
+
+fn view_path(view: &View<'_>, path: &str) -> String {
+    view.align.path(view.which, path)
+}
+
+/// Header fields whose value is a node path, and therefore has to be rewritten
+/// when a node it names was renamed on the other branch.
+fn path_field(kind: SectionKind, name: &str) -> bool {
+    matches!(
+        (kind, name),
+        (SectionKind::Node, "parent")
+            | (SectionKind::Connection, "from")
+            | (SectionKind::Connection, "to")
+            | (SectionKind::Editable, "path")
+    )
 }
 
 enum Pick {
@@ -253,12 +365,12 @@ fn pick(derived: bool, b: &Option<String>, o: &Option<String>, t: &Option<String
 
 /// Final section order: ours' order, with theirs-only entities slotted in after
 /// the neighbour they follow in theirs, then grouped by section class.
-fn merged_order(so: &Scene<'_>, st: &Scene<'_>, plan: &HashMap<EntityId, Res>) -> Vec<EntityId> {
+fn merged_order(vo: &View<'_>, vt: &View<'_>, plan: &HashMap<EntityId, Res>) -> Vec<EntityId> {
     let mut order: Vec<EntityId> =
-        so.ids().iter().filter(|id| plan.contains_key(*id)).cloned().collect();
+        vo.ids().iter().filter(|id| plan.contains_key(*id)).cloned().collect();
     let present: HashSet<EntityId> = order.iter().cloned().collect();
 
-    let theirs_ids = st.ids();
+    let theirs_ids = vt.ids();
     for (i, id) in theirs_ids.iter().enumerate() {
         if present.contains(id) || !plan.contains_key(id) || order.contains(id) {
             continue;
@@ -281,7 +393,7 @@ fn merged_order(so: &Scene<'_>, st: &Scene<'_>, plan: &HashMap<EntityId, Res>) -
 /// Our side's ids are claimed first so that merging never renumbers resources
 /// that were already in our file; only resources arriving from their side are
 /// renamed, and only when their id would collide.
-fn assign_ids(order: &[EntityId], so: &Scene<'_>, st: &Scene<'_>) -> HashMap<EntityId, String> {
+fn assign_ids(order: &[EntityId], vo: &View<'_>, vt: &View<'_>) -> HashMap<EntityId, String> {
     let resources: Vec<&EntityId> =
         order.iter().filter(|id| matches!(id, EntityId::Ext(_) | EntityId::Sub(_))).collect();
 
@@ -290,11 +402,11 @@ fn assign_ids(order: &[EntityId], so: &Scene<'_>, st: &Scene<'_>) -> HashMap<Ent
 
     for ours_first in [true, false] {
         for (position, id) in resources.iter().enumerate() {
-            let from_ours = so.section(id).is_some();
+            let from_ours = vo.section(id).is_some();
             if from_ours != ours_first {
                 continue;
             }
-            let Some(section) = so.section(id).or_else(|| st.section(id)) else { continue };
+            let Some(section) = vo.section(id).or_else(|| vt.section(id)) else { continue };
             let preferred = section.field_str("id").unwrap_or_default();
             if !preferred.is_empty() && used.insert(preferred.to_string()) {
                 out.insert((*id).clone(), preferred.to_string());
@@ -337,17 +449,22 @@ fn emit(
     ours: &Document,
     order: &[EntityId],
     plan: &HashMap<EntityId, Res>,
-    so: &Scene<'_>,
-    st: &Scene<'_>,
+    vo: &View<'_>,
+    vt: &View<'_>,
     final_ids: &HashMap<EntityId, String>,
+    align: &Alignment,
     opts: &MergeOptions,
 ) -> String {
     let ext_count = order.iter().filter(|id| matches!(id, EntityId::Ext(_))).count();
     let sub_count = order.iter().filter(|id| matches!(id, EntityId::Sub(_))).count();
     let load_steps = ext_count + sub_count + 1;
 
-    let map_ours = remapper(so, final_ids);
-    let map_theirs = remapper(st, final_ids);
+    let map_ours = remapper(&vo.scene, final_ids);
+    let map_theirs = remapper(&vt.scene, final_ids);
+    let paths_ours = |p: &str| align.path(Which::Ours, p);
+    let paths_theirs = |p: &str| align.path(Which::Theirs, p);
+    let r_ours = Replay { ids: &map_ours, paths: &paths_ours };
+    let r_theirs = Replay { ids: &map_theirs, paths: &paths_theirs };
     let nl = ours.newline();
 
     let mut out = String::new();
@@ -355,34 +472,25 @@ fn emit(
     for (i, id) in order.iter().enumerate() {
         match plan.get(id) {
             Some(Res::Take(side)) => {
-                let (scene, map): (&Scene<'_>, Remap<'_>) = match side {
-                    Side::Ours => (so, &map_ours),
-                    Side::Theirs => (st, &map_theirs),
+                let (view, replay) = match side {
+                    Side::Ours => (vo, &r_ours),
+                    Side::Theirs => (vt, &r_theirs),
                 };
-                let section = scene.section(id).expect("plan refers to a real section");
-                out.push_str(&render_section(section, id, final_ids, map, load_steps, nl));
+                let section = view.section(id).expect("plan refers to a real section");
+                out.push_str(&render_section(section, id, final_ids, replay, load_steps, nl));
             }
             Some(Res::Merge { fields, props }) => {
                 out.push_str(&render_merged(
-                    id,
-                    fields,
-                    props,
-                    so,
-                    st,
-                    &map_ours,
-                    &map_theirs,
-                    final_ids,
-                    load_steps,
-                    nl,
+                    id, fields, props, vo, vt, &r_ours, &r_theirs, final_ids, load_steps, nl,
                 ));
             }
             Some(Res::Conflict) => {
-                let mine = so
+                let mine = vo
                     .section(id)
-                    .map(|s| render_section(s, id, final_ids, &map_ours, load_steps, nl));
-                let yours = st
+                    .map(|s| render_section(s, id, final_ids, &r_ours, load_steps, nl));
+                let yours = vt
                     .section(id)
-                    .map(|s| render_section(s, id, final_ids, &map_theirs, load_steps, nl));
+                    .map(|s| render_section(s, id, final_ids, &r_theirs, load_steps, nl));
                 let m = "<".repeat(opts.marker_size);
                 let e = "=".repeat(opts.marker_size);
                 let g = ">".repeat(opts.marker_size);
@@ -424,7 +532,7 @@ fn render_section(
     section: &Section,
     id: &EntityId,
     final_ids: &HashMap<EntityId, String>,
-    map: Remap<'_>,
+    replay: &Replay<'_>,
     load_steps: usize,
     nl: &str,
 ) -> String {
@@ -438,7 +546,15 @@ fn render_section(
         out.push_str(&f.sep_eq);
         out.push('=');
         out.push_str(&f.sep_val);
-        out.push_str(&field_text(section, id, &f.name, &f.value_raw, final_ids, map, load_steps));
+        out.push_str(&field_text(
+            section,
+            id,
+            &f.name,
+            &f.value_raw,
+            final_ids,
+            replay,
+            load_steps,
+        ));
     }
     out.push_str(&section.close_sep);
     out.push(']');
@@ -448,12 +564,13 @@ fn render_section(
         out.push_str(&p.sep_eq);
         out.push('=');
         out.push_str(&p.sep_val);
-        out.push_str(&p.rendered(map));
+        out.push_str(&p.rendered(replay.ids));
     }
     out
 }
 
-/// Header field text, with the two derived fields substituted.
+/// Header field text, with derived fields substituted and node paths rewritten
+/// into the merged naming.
 #[allow(clippy::too_many_arguments)]
 fn field_text(
     section: &Section,
@@ -461,7 +578,7 @@ fn field_text(
     name: &str,
     raw: &str,
     final_ids: &HashMap<EntityId, String>,
-    map: Remap<'_>,
+    replay: &Replay<'_>,
     load_steps: usize,
 ) -> String {
     match (section.kind, name) {
@@ -470,8 +587,32 @@ fn field_text(
             Some(new_id) => format!("\"{new_id}\""),
             None => raw.to_string(),
         },
-        _ => section.field(name).map(|f| f.rendered(map)).unwrap_or_else(|| raw.to_string()),
+        _ if path_field(section.kind, name) => {
+            let current = section.field_str(name).unwrap_or_default();
+            let mapped = (replay.paths)(current);
+            if mapped == current {
+                raw.to_string()
+            } else {
+                quote(&mapped)
+            }
+        }
+        _ => section.field(name).map(|f| f.rendered(replay.ids)).unwrap_or_else(|| raw.to_string()),
     }
+}
+
+/// Quotes a node path the way Godot's writer does.
+fn quote(path: &str) -> String {
+    let mut out = String::with_capacity(path.len() + 2);
+    out.push('"');
+    for c in path.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -479,38 +620,38 @@ fn render_merged(
     id: &EntityId,
     fields: &[(String, Side)],
     props: &[(String, Side)],
-    so: &Scene<'_>,
-    st: &Scene<'_>,
-    map_ours: Remap<'_>,
-    map_theirs: Remap<'_>,
+    vo: &View<'_>,
+    vt: &View<'_>,
+    r_ours: &Replay<'_>,
+    r_theirs: &Replay<'_>,
     final_ids: &HashMap<EntityId, String>,
     load_steps: usize,
     nl: &str,
 ) -> String {
-    let ours = so.section(id);
-    let theirs = st.section(id);
+    let ours = vo.section(id);
+    let theirs = vt.section(id);
     let skeleton = ours.or(theirs).expect("a merged entity exists on at least one side");
 
     let mut out = String::new();
     out.push('[');
     out.push_str(&skeleton.tag);
     for (name, side) in fields {
-        let (section, map) = match side {
-            Side::Ours => (ours, map_ours),
-            Side::Theirs => (theirs, map_theirs),
+        let (section, replay) = match side {
+            Side::Ours => (ours, r_ours),
+            Side::Theirs => (theirs, r_theirs),
         };
         let Some(section) = section else { continue };
         let Some(f) = section.field(name) else { continue };
         out.push(' ');
         out.push_str(name);
         out.push('=');
-        out.push_str(&field_text(section, id, name, &f.value_raw, final_ids, map, load_steps));
+        out.push_str(&field_text(section, id, name, &f.value_raw, final_ids, replay, load_steps));
     }
     out.push(']');
     for (key, side) in props {
-        let (section, map) = match side {
-            Side::Ours => (ours, map_ours),
-            Side::Theirs => (theirs, map_theirs),
+        let (section, replay) = match side {
+            Side::Ours => (ours, r_ours),
+            Side::Theirs => (theirs, r_theirs),
         };
         let Some(section) = section else { continue };
         let Some(p) = section.prop(key) else { continue };
@@ -519,7 +660,7 @@ fn render_merged(
         out.push_str(&p.sep_eq);
         out.push('=');
         out.push_str(&p.sep_val);
-        out.push_str(&p.rendered(map));
+        out.push_str(&p.rendered(replay.ids));
     }
     out
 }
