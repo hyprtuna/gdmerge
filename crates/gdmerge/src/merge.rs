@@ -24,6 +24,19 @@ pub fn run(args: MergeArgs) -> Result<i32> {
 
     let (base_src, ours_src, theirs_src) = (io::read(&base)?, io::read(&ours)?, io::read(&theirs)?);
 
+    let text_merge = || -> Result<i32> {
+        let r = fallback::merge_file(
+            &base,
+            &ours,
+            &theirs,
+            marker_size,
+            &args.ours_label,
+            &args.theirs_label,
+        )?;
+        emit(&dest, &r.text)?;
+        Ok(if r.conflicts > 0 { EXIT_CONFLICT } else { 0 })
+    };
+
     // Anything we cannot parse is handed straight to git's text merge, and its
     // exit status is what the caller sees.
     let parsed =
@@ -31,23 +44,25 @@ pub fn run(args: MergeArgs) -> Result<i32> {
     let (b, o, t) = match parsed {
         (Ok(b), Ok(o), Ok(t)) => (b, o, t),
         (b, o, t) => {
-            let why = [("base", b.err()), ("ours", o.err()), ("theirs", t.err())]
+            let why = [(&base, b.err()), (&ours, o.err()), (&theirs, t.err())]
                 .into_iter()
-                .find_map(|(name, e)| e.map(|e| format!("{name}: {e}")))
+                .find_map(|(path, e)| e.map(|e| format!("{}: {e}", path.display())))
                 .unwrap_or_default();
             eprintln!("gdmerge: falling back to a text merge ({why})");
-            let r = fallback::merge_file(
-                &base,
-                &ours,
-                &theirs,
-                marker_size,
-                &args.ours_label,
-                &args.theirs_label,
-            )?;
-            emit(&dest, &r.text)?;
-            return Ok(if r.conflicts > 0 { EXIT_CONFLICT } else { 0 });
+            return text_merge();
         }
     };
+
+    // Parsing is not enough. A file that parses but does not hold together is
+    // one the semantic merge cannot reason about safely, so it gets the same
+    // treatment as one that does not parse at all.
+    let invalid = [(&base, &b, &base_src), (&ours, &o, &ours_src), (&theirs, &t, &theirs_src)]
+        .into_iter()
+        .find_map(|(path, doc, src)| fallback::structural_error(doc, src).map(|why| (path, why)));
+    if let Some((path, why)) = invalid {
+        eprintln!("gdmerge: falling back to a text merge ({}: {why})", path.display());
+        return text_merge();
+    }
 
     let outcome = tscn::merge(&b, &o, &t, &opts);
 
@@ -58,16 +73,7 @@ pub fn run(args: MergeArgs) -> Result<i32> {
             eprintln!(
                 "gdmerge: merged output failed self-validation ({e}); falling back to a text merge"
             );
-            let r = fallback::merge_file(
-                &base,
-                &ours,
-                &theirs,
-                marker_size,
-                &args.ours_label,
-                &args.theirs_label,
-            )?;
-            emit(&dest, &r.text)?;
-            return Ok(if r.conflicts > 0 { EXIT_CONFLICT } else { 0 });
+            return text_merge();
         }
     }
 

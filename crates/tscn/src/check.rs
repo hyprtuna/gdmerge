@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::doc::{Document, SectionKind};
 use crate::nodepath::{findings, Resolution};
 use crate::scene::node_path;
-use crate::value::RefKind;
+use crate::value::{id_text, is_legacy_id, RefKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,41 +58,29 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
         r.error("re-serialising the parsed file does not reproduce it byte for byte".to_string());
     }
 
-    let mut ext_ids: HashSet<&str> = HashSet::new();
-    let mut sub_ids: HashSet<&str> = HashSet::new();
+    let mut ext_ids: HashSet<String> = HashSet::new();
+    let mut sub_ids: HashSet<String> = HashSet::new();
     let (mut ext_count, mut sub_count) = (0usize, 0usize);
 
     for s in &doc.sections {
         match s.kind {
             SectionKind::ExtResource => {
                 ext_count += 1;
-                match s.field_str("id") {
-                    Some(id) if !ext_ids.insert(id) => {
-                        r.error(format!("duplicate ext_resource id \"{id}\""));
-                    }
-                    None => r.error("[ext_resource] has no id".to_string()),
-                    _ => {}
-                }
+                let id = declared_id(s, "ext_resource", &mut ext_ids, &mut r);
                 if s.field_str("path").is_none() {
                     r.error(format!(
                         "[ext_resource id=\"{}\"] has no path",
-                        s.field_str("id").unwrap_or("?")
+                        id.as_deref().unwrap_or("?")
                     ));
                 }
             }
             SectionKind::SubResource => {
                 sub_count += 1;
-                match s.field_str("id") {
-                    Some(id) if !sub_ids.insert(id) => {
-                        r.error(format!("duplicate sub_resource id \"{id}\""));
-                    }
-                    None => r.error("[sub_resource] has no id".to_string()),
-                    _ => {}
-                }
+                let id = declared_id(s, "sub_resource", &mut sub_ids, &mut r);
                 if s.field_str("type").is_none() {
                     r.error(format!(
                         "[sub_resource id=\"{}\"] has no type",
-                        s.field_str("id").unwrap_or("?")
+                        id.as_deref().unwrap_or("?")
                     ));
                 }
             }
@@ -111,17 +99,13 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
     }
 
     for s in &doc.sections {
-        for reference in s.refs() {
-            let known = match reference.kind {
-                RefKind::Ext => ext_ids.contains(reference.id.as_str()),
-                RefKind::Sub => sub_ids.contains(reference.id.as_str()),
+        for (kind, id) in s.all_refs() {
+            let known = match kind {
+                RefKind::Ext => ext_ids.contains(&id),
+                RefKind::Sub => sub_ids.contains(&id),
             };
             if !known {
-                r.error(format!(
-                    "dangling {}(\"{}\") reference",
-                    reference.kind.ctor(),
-                    reference.id
-                ));
+                r.error(format!("dangling {}(\"{id}\") reference", kind.ctor()));
             }
         }
     }
@@ -140,6 +124,37 @@ pub fn check(doc: &Document, source: &str) -> CheckReport {
     check_nodes(doc, &mut r);
     check_node_paths(doc, &mut r);
     r
+}
+
+/// Records the id a resource section declares, reporting what is wrong with it.
+///
+/// Godot 4 quotes resource ids. Godot 3 wrote them as bare integers, and a file
+/// that still does is not one gdmerge can merge: the id has no stable spelling
+/// to renumber, and the `SubResource( 1 )` references to it are written the same
+/// legacy way. Saying so here is what keeps `merge` from touching such a file.
+fn declared_id(
+    s: &crate::doc::Section,
+    tag: &str,
+    seen: &mut HashSet<String>,
+    r: &mut CheckReport,
+) -> Option<String> {
+    let Some(field) = s.field("id") else {
+        r.error(format!("[{tag}] has no id"));
+        return None;
+    };
+    let Some(id) = id_text(&field.value) else {
+        r.error(format!("[{tag}] has an id that is neither a string nor a number"));
+        return None;
+    };
+    if is_legacy_id(&field.value) {
+        r.error(format!(
+            "[{tag} id={id}] uses the Godot 3 unquoted id form; Godot 4 quotes resource ids"
+        ));
+    }
+    if !seen.insert(id.clone()) {
+        r.error(format!("duplicate {tag} id \"{id}\""));
+    }
+    Some(id)
 }
 
 /// Every `NodePath` in the file has to name something.

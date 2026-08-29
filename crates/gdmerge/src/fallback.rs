@@ -1,7 +1,8 @@
 //! Text fallback for files gdmerge cannot understand.
 //!
 //! The safety contract is that gdmerge never does worse than git would. When a
-//! file fails to parse (a truncated scene, a format from a future engine) the
+//! file fails to parse (a truncated scene, a format from a future engine), or
+//! parses but is not a file gdmerge's model describes (a Godot 3 scene), the
 //! merge is handed to `git merge-file`, and its exit status is passed through
 //! unchanged.
 
@@ -10,6 +11,20 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use similar::{ChangeTag, TextDiff};
+use tscn::Document;
+
+/// The first structural error in a parsed input, if it has one.
+///
+/// Parsing is not enough to make a file safe to merge. A Godot 3 scene parses
+/// cleanly and then merges wrong: its resource ids are bare integers, so the
+/// merge renumbers a `[sub_resource]` into the Godot 4 spelling while the
+/// `SubResource( 1 )` references to it stay as they were, and the result is a
+/// scene Godot cannot load. Every input therefore has to pass the same
+/// validation `gdmerge check` runs before the semantic merge is allowed to
+/// touch it; anything that does not goes to git's text merge instead.
+pub fn structural_error(doc: &Document, source: &str) -> Option<String> {
+    tscn::check(doc, source).errors().next().map(|issue| issue.message.clone())
+}
 
 pub struct Fallback {
     pub text: String,

@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-29
+
+### Fixed
+
+- Godot 3 files are no longer merged silently wrong. A scene whose resource ids use the Godot 3
+  unquoted spelling (`id=1`, referenced as `SubResource( 1 )`) parses, so 0.1.0 through 0.3.1 merged
+  it semantically: the `[sub_resource]` id was rewritten into the Godot 4 form while the references
+  to it were left as they were, producing a scene that gdmerge and git both called clean and Godot
+  could not load. Through the installed merge driver that ended as a committed, broken scene. Every
+  input is now put through the same validation `gdmerge check` runs, and a file that fails it is
+  handed to `git merge-file` like an unparseable one: byte-identical output, git's exit status, and
+  one line on stderr naming the file and the reason. `gdmerge mergetool` applies the same guard,
+  since it redoes the merge and overwrites the conflicted file.
+- `gdmerge check` recognises the Godot 3 unquoted forms. `ExtResource( 1 )` and `SubResource( 1 )`
+  are now resolved like their quoted counterparts, so a dangling reference written that way is
+  reported instead of ignored, and a resource declaring `id=1` is reported as the legacy form rather
+  than as having no id at all.
+
 ## [0.3.1] - 2026-08-29
 
 The crates are byte for byte identical to 0.3.0. This release exists so the pre-commit hook has
