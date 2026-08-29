@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 Cargo.lock.orig
+
+# Left behind by running the release helper script.
+__pycache__/
