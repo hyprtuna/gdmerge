@@ -1,7 +1,7 @@
 //! Text fallback for files gdmerge cannot understand.
 //!
 //! The safety contract is that gdmerge never does worse than git would. When a
-//! file fails to parse — a truncated scene, a format from a future engine — the
+//! file fails to parse (a truncated scene, a format from a future engine) the
 //! merge is handed to `git merge-file`, and its exit status is passed through
 //! unchanged.
 

@@ -3,7 +3,7 @@
 //! The model is deliberately generic: it records the *shape* of a literal
 //! (`Name(args...)`, `Array[T]([...])`, `Object(Type, "k": v)`, ...) without
 //! knowing Godot's type list, so a future engine type parses without a change
-//! here. It is used for comparison only — output always replays the original
+//! here. It is used for comparison only; output always replays the original
 //! source text, which is what makes round-tripping lossless.
 
 use std::fmt::Write as _;
@@ -48,7 +48,7 @@ pub enum Value {
     Color(String),
     Array(Vec<Value>),
     Dict(Vec<(Value, Value)>),
-    /// `Name(a, b, ...)` — every constructor, including `ExtResource("1_a")`.
+    /// `Name(a, b, ...)`: every constructor, including `ExtResource("1_a")`.
     Call {
         name: String,
         args: Vec<Value>,

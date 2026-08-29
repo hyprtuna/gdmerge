@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for taking a look. Bug reports with the three files attached — the common ancestor, your
-version and theirs — are the single most useful thing you can send.
+Thanks for taking a look. Bug reports with the three files attached (the common ancestor, your
+version and theirs) are the single most useful thing you can send.
 
 ## Development setup
 
@@ -56,7 +56,7 @@ license-compatible file with clear provenance is fine, an ad-hoc copy of someone
 ## Adding a golden merge case
 
 Each directory under `crates/tscn/tests/merge_cases/` holds `base`, `ours` and `theirs` (all
-`.tscn`, or all `.tres`), the `expected` output, and — when the merge is meant to conflict — a
+`.tscn`, or all `.tres`), the `expected` output, and, when the merge is meant to conflict, a
 `conflicts.txt` with one entity description per line.
 
 ```console
@@ -67,7 +67,7 @@ $ git diff crates/tscn/tests/merge_cases/
 ```
 
 `GDMERGE_BLESS=1` records whatever the current code produces, so **read the recorded output before
-committing it** — it is a proposal, not an answer. Then run `cargo test` without the variable to
+committing it**: it is a proposal, not an answer. Then run `cargo test` without the variable to
 confirm it is stable.
 
 Every case is also held to three invariants automatically, which is most of the value of adding one:
@@ -83,7 +83,7 @@ If a case's output gets *worse*, that is the change telling you something.
 
 The grammar follows Godot's own `core/variant/variant_parser.cpp` and
 `scene/resources/resource_format_text.cpp` on the 4.x branch. When something about the file format
-is in question, those files are the authority — please do not guess, and cite what you found.
+is in question, those files are the authority; please do not guess, and cite what you found.
 
 ## Commits and pull requests
 

@@ -1,4 +1,4 @@
-//! Structural sanity checks — the same invariants Godot's loader relies on.
+//! Structural sanity checks: the same invariants Godot's loader relies on.
 
 use std::collections::{HashMap, HashSet};
 

@@ -1,7 +1,7 @@
 //! Golden three-way merge cases.
 //!
 //! Each directory under `merge_cases/` holds `base`, `ours` and `theirs`, plus
-//! the `expected` result and — when the merge is meant to conflict — a
+//! the `expected` result and, when the merge is meant to conflict, a
 //! `conflicts.txt` listing one entity description per line.
 //!
 //! Re-record the expected files after an intentional behaviour change with

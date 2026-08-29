@@ -1,11 +1,11 @@
 # gdmerge
 
-Semantic diff and 3-way merge for Godot 4 scenes and resources (`.tscn` / `.tres`) — a git
+Semantic diff and 3-way merge for Godot 4 scenes and resources (`.tscn` / `.tres`): a git
 merge driver that ends scene merge conflicts.
 
 Godot mints a fresh random id for every resource in a scene file, per file, on every save. Two
-teammates who each add one texture will both get an id like `2_ni7xa`, on the same line, and git —
-which only sees text — declares a conflict that a human then has to resolve by hand in a file
+teammates who each add one texture will both get an id like `2_ni7xa`, on the same line, and git,
+which only sees text, declares a conflict that a human then has to resolve by hand in a file
 format that punishes mistakes. gdmerge reads the file the way Godot does, merges nodes, resources
 and connections by *identity* instead of by line number, and reassigns the ids itself.
 
@@ -82,7 +82,7 @@ texture = ExtResource("2_ni7xa")
 ```
 
 Both resources survive, the colliding id is reassigned, every reference to it is rewritten, and
-`load_steps` is recomputed. Our side's ids are never renumbered — only an incoming resource whose id
+`load_steps` is recomputed. Our side's ids are never renumbered; only an incoming resource whose id
 would collide gets a new one.
 
 ## What is resolved and what conflicts
@@ -113,13 +113,13 @@ rest of the scene stays readable and the part you need to look at is obvious.
   abandoned in favour of git's own text merge.
 - **Never writes partial output.** Results are written to a temporary file and renamed into place.
 - **Never rewrites an untouched branch.** If one side made no semantic change, the other side's
-  bytes are returned exactly as they were — byte for byte, comments and formatting included.
+  bytes are returned exactly as they were: byte for byte, comments and formatting included.
 - **Fails loud.** Exit `0` for a clean merge, `1` for conflicts, `2` for an error; conflicts are
   named on stderr.
 
 ## The other two commands
 
-`gdmerge diff` shows what changed in terms Godot users think in — nodes, resources, connections —
+`gdmerge diff` shows what changed in terms Godot users think in (nodes, resources, connections)
 instead of lines:
 
 ```console
@@ -164,13 +164,13 @@ ok   level.tscn
 
 | | Editing conflicts by hand | [derkork/tscnmerge](https://github.com/derkork/tscnmerge) | Unity's UnityYAMLMerge | gdmerge |
 | --- | --- | --- | --- | --- |
-| Godot 4 support | — | no (Godot 3) | no (Unity only) | yes |
-| Maintained | — | archived | yes | yes |
+| Godot 4 support | n/a | no (Godot 3) | no (Unity only) | yes |
+| Maintained | n/a | archived | yes | yes |
 | Runs as a git merge driver | no | yes | yes | yes |
 | Handles randomised resource ids | manually | Godot 3 ids only | n/a | yes |
 | Semantic diff command | no | no | no | yes |
 | Structural validation command | no | no | no | yes |
-| Install | — | Python + pip | ships with Unity | single binary |
+| Install | n/a | Python + pip | ships with Unity | single binary |
 
 If you use Unity, UnityYAMLMerge already does this for you and has for years. Godot has had nothing
 maintained; that is the gap this fills.
@@ -192,7 +192,7 @@ move; gdmerge keeps ours and reassigns theirs, rewriting every reference. Godot 
 everything to its own scheme the next time it saves the scene anyway.
 
 **Does it work with rebase and cherry-pick?**
-Yes — anything that goes through git's merge machinery, including `git rebase`, `git cherry-pick`,
+Yes. Anything that goes through git's merge machinery, including `git rebase`, `git cherry-pick`,
 `git stash pop` and `git revert`.
 
 **What if it hits a file it does not understand?**
@@ -208,8 +208,8 @@ hard gate in CI.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports are much easier to act on with the three files
-attached — the common ancestor, your version, and theirs.
+attached: the common ancestor, your version, and theirs.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

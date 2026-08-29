@@ -19,18 +19,18 @@ First release.
 
 ### Added
 
-- `gdmerge merge` — three-way merge of `.tscn` and `.tres` files by semantic identity. Nodes are
+- `gdmerge merge`: three-way merge of `.tscn` and `.tres` files by semantic identity. Nodes are
   matched by scene-tree path, external resources by `uid` then `path`, sub-resources by content, and
   connections by their endpoints, so randomised per-file resource ids no longer cause conflicts.
   Colliding ids are reassigned and every reference to them rewritten; `load_steps` is recomputed.
   Conflict markers wrap only the entity that actually conflicts. Accepts git's merge-driver argument
   order (`%O %A %B %L %P`), so it works as a driver as well as from the command line.
-- `gdmerge diff` — semantic diff reporting added, removed, renamed, reparented, reordered and
+- `gdmerge diff`: semantic diff reporting added, removed, renamed, reparented, reordered and
   modified nodes, resources and connections, with `--json` output.
-- `gdmerge check` — parses a file, proves it round-trips byte for byte, and validates it: dangling
+- `gdmerge check`: parses a file, proves it round-trips byte for byte, and validates it: dangling
   `ExtResource`/`SubResource` references, duplicate ids, duplicate or orphaned node paths, missing or
   multiple roots, colliding sibling indices, and a stale `load_steps`.
-- `gdmerge git-install` / `gdmerge git-uninstall` — one-command setup and removal of the git merge
+- `gdmerge git-install` / `gdmerge git-uninstall`: one-command setup and removal of the git merge
   driver and the `.gitattributes` entries, per repository or per user.
 - `tscn`, the library behind the tool: a lossless parser and serializer for the Godot 4 text
   resource format, plus the semantic model, diff, merge and checks.

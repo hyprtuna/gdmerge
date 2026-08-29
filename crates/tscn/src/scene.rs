@@ -118,7 +118,7 @@ impl<'d> Scene<'d> {
     }
 
     /// A human-readable label for an entity, enriched with detail that only the
-    /// document carries — a root node's name, for instance, which its identity
+    /// document carries: a root node's name, for instance, which its identity
     /// (always `.`) deliberately leaves out so renaming the root is a property
     /// change rather than a delete and an add.
     pub fn describe(&self, id: &EntityId) -> String {

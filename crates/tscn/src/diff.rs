@@ -180,7 +180,7 @@ fn section_delta(
 }
 
 /// Pairs removed and added nodes whose contents are identical: a rename, a
-/// reparent, or both. Deliberately conservative — contents must match exactly.
+/// reparent, or both. Deliberately conservative: contents must match exactly.
 fn detect_moves(
     a: &Scene<'_>,
     b: &Scene<'_>,
