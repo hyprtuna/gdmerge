@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A file that nests values thousands of levels deep no longer overflows the stack and aborts the
+  process. Nesting is parsed recursively and had no limit; values may now nest 128 levels, which is
+  far more than a real scene uses and more than Godot's own writer will emit, and anything deeper is
+  a parse error like any other malformed input. Found by fuzzing.
+
+### Added
+
+- Fuzz targets for the tokenizer, the variant parser and whole-document parsing, in `fuzz/`, with a
+  weekly workflow that runs each for ten minutes.
+
 ## [0.2.0] - 2026-08-29
 
 ### Added

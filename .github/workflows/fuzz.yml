@@ -1,0 +1,67 @@
+name: Fuzz
+
+# The parser reads files that arrive from forks and pull requests, so the thing
+# worth guarding against is a malformed one crashing the process rather than
+# failing to parse. Weekly is enough: this is a soak, not a gate, and it does
+# not block pull requests.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [lex, value, document]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # libFuzzer needs a sanitizer, which needs nightly.
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      # The real scene fixtures are a far better starting corpus than random
+      # bytes, and they are already in the repository, so they are passed as an
+      # extra read-only corpus rather than copied into the seeds.
+      - name: Fuzz for ten minutes
+        shell: bash
+        run: |
+          # cargo-fuzz requires an explicitly named corpus directory to exist.
+          mkdir -p "fuzz/corpus/${{ matrix.target }}"
+          extra=""
+          if [ "${{ matrix.target }}" != "value" ]; then
+            extra="crates/tscn/tests/fixtures"
+          fi
+          cargo fuzz run "${{ matrix.target }}" \
+            "fuzz/corpus/${{ matrix.target }}" \
+            "fuzz/seeds/${{ matrix.target }}" \
+            $extra \
+            -- -max_total_time=600 -print_final_stats=1
+
+      - name: Keep any crash that was found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
