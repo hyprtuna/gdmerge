@@ -268,7 +268,9 @@ maintained; that is the gap this fills.
 **Do my teammates need it installed?**
 Yes. `.gitattributes` records *which* files use the `gdmerge` driver and is committed; the driver
 itself is defined in each person's git config by `gdmerge git-install`. Anyone who has not installed
-it just gets git's normal text merge, exactly as before.
+it just gets git's normal text merge, exactly as before: the driver `git-install` writes checks for
+the binary and hands the merge to `git merge-file` when it is not there, so a missing `gdmerge`
+costs you the semantic merge and nothing else. Conflict markers, both sides, git's exit status.
 
 **Will it reformat my scene files?**
 No. Sections are replayed from the original bytes, including comments and whitespace. Only the

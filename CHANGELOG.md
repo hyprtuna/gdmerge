@@ -20,6 +20,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   handed to `git merge-file` like an unparseable one: byte-identical output, git's exit status, and
   one line on stderr naming the file and the reason. `gdmerge mergetool` applies the same guard,
   since it redoes the merge and overwrites the conflicted file.
+- A missing `gdmerge` binary no longer loses one side of a merge. With the driver configured and
+  the binary not on the `PATH` git sees, git left the file conflicted holding only our side, with no
+  conflict markers in it, so `git add` discarded the other side without a word. `gdmerge git-install`
+  now writes the driver as a shell fragment that checks for the binary and runs
+  `git merge-file` when it is absent, making the worst case git's own text merge. Existing
+  installations pick this up by re-running `gdmerge git-install`.
 - `gdmerge check` recognises the Godot 3 unquoted forms. `ExtResource( 1 )` and `SubResource( 1 )`
   are now resolved like their quoted counterparts, so a dangling reference written that way is
   reported instead of ignored, and a resource declaring `id=1` is reported as the legacy form rather

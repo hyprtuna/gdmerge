@@ -380,6 +380,21 @@ fn git(dir: &Path, args: &[&str]) -> Output {
         }
         None => bin_dir.as_os_str().to_owned(),
     };
+    git_with_path(dir, args, path)
+}
+
+/// A `PATH` with every directory holding a `gdmerge` removed, so the driver's
+/// own `command -v` check fails. Filtered rather than emptied, because git and
+/// the shell it runs the driver through still have to be reachable.
+fn path_without_gdmerge() -> std::ffi::OsString {
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let kept: Vec<PathBuf> = std::env::split_paths(&existing)
+        .filter(|dir| !dir.join("gdmerge").exists() && !dir.join("gdmerge.exe").exists())
+        .collect();
+    std::env::join_paths(kept).expect("building PATH")
+}
+
+fn git_with_path(dir: &Path, args: &[&str], path: std::ffi::OsString) -> Output {
     Command::new("git")
         .current_dir(dir)
         .env("PATH", path)
@@ -697,4 +712,33 @@ fn merging_legacy_input_introduces_no_new_breakage() {
             "the merge introduced an error none of its inputs had: {error}"
         );
     }
+}
+
+/// The driver is configured per repository and committed as `.gitattributes`,
+/// so a teammate who has not installed gdmerge still has git calling it. If
+/// that call simply fails, git leaves `%A` holding only our side, marks the
+/// file conflicted, and puts no markers in it: staging it drops their work
+/// without a word. The worst case has to be git's own text merge instead.
+#[test]
+fn the_driver_falls_back_to_git_when_gdmerge_is_not_installed() {
+    let s = Scratch::new("driver-missing");
+    setup_repo(s.path());
+
+    let install = Command::new(BIN)
+        .current_dir(s.path())
+        .arg("git-install")
+        .output()
+        .expect("running gdmerge git-install");
+    assert!(install.status.success(), "{}", String::from_utf8_lossy(&install.stderr));
+
+    let out = git_with_path(s.path(), &["merge", "--no-edit", "feature"], path_without_gdmerge());
+    assert!(!out.status.success(), "a text merge of this pair does conflict");
+
+    let merged = std::fs::read_to_string(s.path().join("level.tscn")).unwrap();
+    assert!(merged.contains("<<<<<<< ours"), "no conflict markers at all:\n{merged}");
+    assert!(merged.contains(">>>>>>> theirs"), "{merged}");
+    // Both sides survived, which is the whole point: neither can be lost by a
+    // `git add` that trusts what is in the file.
+    assert!(merged.contains("uid://tex_player"), "our side is missing:\n{merged}");
+    assert!(merged.contains("uid://snd_step"), "their side is missing:\n{merged}");
 }
