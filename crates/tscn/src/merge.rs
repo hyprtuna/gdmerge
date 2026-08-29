@@ -348,6 +348,7 @@ fn emit(
 
     let map_ours = remapper(so, final_ids);
     let map_theirs = remapper(st, final_ids);
+    let nl = ours.newline();
 
     let mut out = String::new();
     out.push_str(&ours.lead);
@@ -359,7 +360,7 @@ fn emit(
                     Side::Theirs => (st, &map_theirs),
                 };
                 let section = scene.section(id).expect("plan refers to a real section");
-                out.push_str(&render_section(section, id, final_ids, map, load_steps));
+                out.push_str(&render_section(section, id, final_ids, map, load_steps, nl));
             }
             Some(Res::Merge { fields, props }) => {
                 out.push_str(&render_merged(
@@ -372,44 +373,50 @@ fn emit(
                     &map_theirs,
                     final_ids,
                     load_steps,
+                    nl,
                 ));
             }
             Some(Res::Conflict) => {
-                let mine =
-                    so.section(id).map(|s| render_section(s, id, final_ids, &map_ours, load_steps));
+                let mine = so
+                    .section(id)
+                    .map(|s| render_section(s, id, final_ids, &map_ours, load_steps, nl));
                 let yours = st
                     .section(id)
-                    .map(|s| render_section(s, id, final_ids, &map_theirs, load_steps));
+                    .map(|s| render_section(s, id, final_ids, &map_theirs, load_steps, nl));
                 let m = "<".repeat(opts.marker_size);
                 let e = "=".repeat(opts.marker_size);
                 let g = ">".repeat(opts.marker_size);
-                let _ = writeln!(out, "{m} {}", opts.ours_label);
+                let _ = write!(out, "{m} {}{nl}", opts.ours_label);
                 if let Some(body) = mine {
                     out.push_str(&body);
-                    out.push('\n');
+                    out.push_str(nl);
                 }
-                let _ = writeln!(out, "{e}");
+                let _ = write!(out, "{e}{nl}");
                 if let Some(body) = yours {
                     out.push_str(&body);
-                    out.push('\n');
+                    out.push_str(nl);
                 }
                 let _ = write!(out, "{g} {}", opts.theirs_label);
             }
             None => continue,
         }
-        out.push_str(separator(id, order.get(i + 1)));
+        for _ in 0..separator_lines(id, order.get(i + 1)) {
+            out.push_str(nl);
+        }
     }
     out
 }
 
-/// Whitespace between two sections, matching Godot's own writer.
-fn separator(current: &EntityId, next: Option<&EntityId>) -> &'static str {
-    let Some(next) = next else { return "\n" };
+/// How many line breaks go between two sections, matching Godot's own writer:
+/// consecutive resource, connection and editable entries are packed together,
+/// everything else is separated by a blank line.
+fn separator_lines(current: &EntityId, next: Option<&EntityId>) -> usize {
+    let Some(next) = next else { return 1 };
     match (current, next) {
-        (EntityId::Ext(_), EntityId::Ext(_)) => "\n",
-        (EntityId::Connection(..), EntityId::Connection(..)) => "\n",
-        (EntityId::Editable(_), EntityId::Editable(_)) => "\n",
-        _ => "\n\n",
+        (EntityId::Ext(_), EntityId::Ext(_)) => 1,
+        (EntityId::Connection(..), EntityId::Connection(..)) => 1,
+        (EntityId::Editable(_), EntityId::Editable(_)) => 1,
+        _ => 2,
     }
 }
 
@@ -419,6 +426,7 @@ fn render_section(
     final_ids: &HashMap<EntityId, String>,
     map: Remap<'_>,
     load_steps: usize,
+    nl: &str,
 ) -> String {
     let mut out = String::new();
     out.push('[');
@@ -435,7 +443,7 @@ fn render_section(
     out.push_str(&section.close_sep);
     out.push(']');
     for p in &section.props {
-        push_lead(&mut out, &p.lead);
+        push_lead(&mut out, &p.lead, nl);
         out.push_str(&p.key_raw);
         out.push_str(&p.sep_eq);
         out.push('=');
@@ -477,6 +485,7 @@ fn render_merged(
     map_theirs: Remap<'_>,
     final_ids: &HashMap<EntityId, String>,
     load_steps: usize,
+    nl: &str,
 ) -> String {
     let ours = so.section(id);
     let theirs = st.section(id);
@@ -505,7 +514,7 @@ fn render_merged(
         };
         let Some(section) = section else { continue };
         let Some(p) = section.prop(key) else { continue };
-        push_lead(&mut out, &p.lead);
+        push_lead(&mut out, &p.lead, nl);
         out.push_str(&p.key_raw);
         out.push_str(&p.sep_eq);
         out.push('=');
@@ -517,11 +526,9 @@ fn render_merged(
 
 /// Property leads carry the newline that starts the line. A pick taken from the
 /// other side could in principle arrive without one, so guarantee it.
-fn push_lead(out: &mut String, lead: &str) {
-    if lead.contains('\n') {
-        out.push_str(lead);
-    } else {
-        out.push('\n');
-        out.push_str(lead);
+fn push_lead(out: &mut String, lead: &str, nl: &str) {
+    if !lead.contains('\n') {
+        out.push_str(nl);
     }
+    out.push_str(lead);
 }

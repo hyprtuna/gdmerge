@@ -1,0 +1,6 @@
+# Test data is compared byte for byte, so git must never translate its line
+# endings on checkout.
+crates/tscn/tests/fixtures/** -text
+crates/tscn/tests/merge_cases/** -text
+
+*.sh text eol=lf

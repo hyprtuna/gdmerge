@@ -176,3 +176,32 @@ fn unchanged_side_preserves_the_other_verbatim() {
         );
     }
 }
+
+/// A CRLF file must come back entirely CRLF. Sections are replayed from their
+/// original bytes, but the blank lines a merge inserts between them are
+/// synthesised, and a Windows checkout with `core.autocrlf=true` hands gdmerge
+/// CRLF files and expects CRLF back.
+#[test]
+fn crlf_documents_stay_crlf() {
+    fn to_crlf(s: &str) -> String {
+        s.replace("\r\n", "\n").replace('\n', "\r\n")
+    }
+
+    for case in cases() {
+        let base_src = to_crlf(&read(&case.dir.join(format!("base.{}", case.ext))));
+        let ours_src = to_crlf(&read(&case.dir.join(format!("ours.{}", case.ext))));
+        let theirs_src = to_crlf(&read(&case.dir.join(format!("theirs.{}", case.ext))));
+        let base = Document::parse(&base_src).expect("base parses");
+        let ours = Document::parse(&ours_src).expect("ours parses");
+        let theirs = Document::parse(&theirs_src).expect("theirs parses");
+
+        let outcome = tscn::merge(&base, &ours, &theirs, &MergeOptions::default());
+        let lone_lf =
+            outcome.text.as_bytes().windows(2).filter(|w| w[1] == b'\n' && w[0] != b'\r').count();
+        assert_eq!(lone_lf, 0, "{}: merged output mixes CRLF and LF:\n{}", case.name, outcome.text);
+
+        // The expected output is the recorded one with its line endings swapped.
+        let expected = to_crlf(&read(&case.dir.join(format!("expected.{}", case.ext))));
+        assert_eq!(outcome.text, expected, "{}: CRLF merge differs from the LF merge", case.name);
+    }
+}

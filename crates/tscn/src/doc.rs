@@ -221,6 +221,25 @@ impl Document {
         out
     }
 
+    /// The line ending this document uses: `\r\n` if any separator in it is a
+    /// CRLF, otherwise `\n`.
+    ///
+    /// Sections are replayed from their original bytes, but the blank lines a
+    /// merge inserts *between* sections are synthesised, and they have to match
+    /// the rest of the file. A Windows checkout with `core.autocrlf=true` hands
+    /// gdmerge CRLF files and expects CRLF back.
+    pub fn newline(&self) -> &'static str {
+        let crlf = self.lead.contains("\r\n")
+            || self.sections.iter().any(|s| {
+                s.trailing.contains("\r\n") || s.props.iter().any(|p| p.lead.contains("\r\n"))
+            });
+        if crlf {
+            "\r\n"
+        } else {
+            "\n"
+        }
+    }
+
     pub fn is_scene(&self) -> bool {
         matches!(self.sections.first().map(|s| s.kind), Some(SectionKind::GdScene))
     }
