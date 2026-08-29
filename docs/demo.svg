@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="540" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">
+<style>
+.bg{fill:#12141c}.p{fill:#7aa2f7}.o{fill:#c0caf5}.c{fill:#9ece6a}.w{fill:#e0af68}
+text{opacity:0;animation:r .01s linear forwards}@keyframes r{to{opacity:1}}
+</style>
+<rect class="bg" width="860" height="540" rx="8"/>
+<circle cx="22" cy="22" r="6" fill="#f7768e"/><circle cx="42" cy="22" r="6" fill="#e0af68"/><circle cx="62" cy="22" r="6" fill="#9ece6a"/>
+<text class="p" x="20" y="62" style="animation-delay:0.00s" xml:space="preserve">$ git merge audio</text>
+<text class="w" x="20" y="84" style="animation-delay:0.35s" xml:space="preserve">  CONFLICT (content): Merge conflict in level.tscn</text>
+<text class="w" x="20" y="106" style="animation-delay:0.70s" xml:space="preserve">  Automatic merge failed; fix conflicts and then commit the result.</text>
+<text class="w" x="20" y="128" style="animation-delay:1.05s" xml:space="preserve">  4:&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</text>
+<text class="w" x="20" y="150" style="animation-delay:1.40s" xml:space="preserve">  8:=======</text>
+<text class="w" x="20" y="172" style="animation-delay:1.75s" xml:space="preserve">  10:&gt;&gt;&gt;&gt;&gt;&gt;&gt; audio</text>
+<text class="p" x="20" y="194" style="animation-delay:2.10s" xml:space="preserve">$ gdmerge git-install</text>
+<text class="o" x="20" y="216" style="animation-delay:2.45s" xml:space="preserve">  configured the 'gdmerge' merge driver in /home/you/game/.git/config</text>
+<text class="o" x="20" y="238" style="animation-delay:2.80s" xml:space="preserve">  added *.tscn and *.tres rules to /home/you/game/.gitattributes</text>
+<text class="p" x="20" y="260" style="animation-delay:3.15s" xml:space="preserve">$ git merge audio</text>
+<text class="o" x="20" y="282" style="animation-delay:3.50s" xml:space="preserve">  Auto-merging level.tscn</text>
+<text class="o" x="20" y="304" style="animation-delay:3.85s" xml:space="preserve">  Merge made by the 'ort' strategy.</text>
+<text class="p" x="20" y="326" style="animation-delay:4.20s" xml:space="preserve">$ gdmerge diff &lt;(git show HEAD^1:level.tscn) level.tscn</text>
+<text class="o" x="20" y="348" style="animation-delay:4.55s" xml:space="preserve">  2 semantic changes</text>
+<text class="o" x="20" y="370" style="animation-delay:4.90s" xml:space="preserve">  </text>
+<text class="o" x="20" y="392" style="animation-delay:5.25s" xml:space="preserve">    + ext_resource uid://snd_step</text>
+<text class="o" x="20" y="414" style="animation-delay:5.60s" xml:space="preserve">  </text>
+<text class="o" x="20" y="436" style="animation-delay:5.95s" xml:space="preserve">    + node Steps</text>
+<text class="p" x="20" y="458" style="animation-delay:6.30s" xml:space="preserve">$ gdmerge check level.tscn</text>
+<text class="c" x="20" y="480" style="animation-delay:6.65s" xml:space="preserve">  ok   level.tscn</text>
+<text class="o" x="20" y="502" style="animation-delay:7.00s" xml:space="preserve">  </text>
+<text class="o" x="20" y="524" style="animation-delay:7.35s" xml:space="preserve">  1 file checked, 0 failed</text>
+</svg>
