@@ -175,19 +175,25 @@ Add `--json` for a machine-readable form.
 pristine versions git hands it, writes the result, and prints the table above. It also works
 directly: `gdmerge mergetool base.tscn ours.tscn theirs.tscn out.tscn`.
 
-`gdmerge check` parses a file, proves it round-trips byte for byte, and validates it structurally:
-dangling `ExtResource`/`SubResource` references, duplicate ids, duplicate or orphaned node paths,
-more than one root, colliding sibling indices, and a stale `load_steps`.
+`gdmerge check` parses a file, proves it round-trips byte for byte, and validates it structurally.
 
-It also resolves every `NodePath` in the file against the scene tree, from the node that holds it,
+**It fails** (exit `1`) on a file Godot would refuse to load, or would load wrongly: dangling
+`ExtResource`/`SubResource` references, duplicate ids, duplicate or orphaned node paths, a missing
+or repeated root, colliding sibling indices, and Godot 3 resource ids.
+
+**It warns** (exit `0`) about the rest: a stale `load_steps`, which Godot recomputes on save, and a
+`NodePath` that cannot be judged from this file alone. Those are worth knowing about and not worth
+blocking a commit over, so the pre-commit hook below lets them through.
+
+It resolves every `NodePath` in the file against the scene tree, from the node that holds it,
 including animation track paths inside sub-resources, exported node paths, `%unique` names and the
 `path:subname` form. A path that names nothing is an error; one that reaches into an instanced
-scene, or above the root, is reported as unverifiable rather than wrong. This is the check that
-catches a scene wired to a node somebody renamed, which loads without complaint and then does
+scene, or above the root, is the warning above: unverifiable rather than wrong. This is the check
+that catches a scene wired to a node somebody renamed, which loads without complaint and then does
 nothing.
 
 It is useful on its own, and ships a [pre-commit](https://pre-commit.com) hook so a broken scene
-never reaches a commit:
+never reaches a commit. The hook blocks on the failures above and lets the warnings through:
 
 ```console
 $ gdmerge check level.tscn

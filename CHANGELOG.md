@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.3.2] - 2026-08-29
 
+### Changed
+
+- The README and the pre-commit hook description now separate what `gdmerge check` fails on from
+  what it only warns about. A stale `load_steps` was listed among the things `check` validates,
+  which read as a promise that it would fail the check and so block a commit through the hook. It
+  is a warning, and has been since 0.1.0: Godot recomputes `load_steps` on the next save. Nothing
+  about the tool's behaviour changed, only what is claimed about it.
+
 ### Fixed
 
 - Godot 3 files are no longer merged silently wrong. A scene whose resource ids use the Godot 3

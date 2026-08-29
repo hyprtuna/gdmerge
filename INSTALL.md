@@ -145,6 +145,12 @@ Every changed `.tscn` and `.tres` is then checked before it is committed, which 
 resource reference or a node path naming something that is not there at the point it is introduced,
 rather than when somebody opens the scene and wonders why nothing moves.
 
+The hook blocks the commit on anything Godot would refuse to load or would load wrongly, which is
+what `gdmerge check` exits `1` for. It does not block on the things `check` only warns about: a
+stale `load_steps`, which Godot recomputes the next time it saves the scene, and a `NodePath` that
+cannot be judged from one file, such as one reaching into an instanced scene. Those are printed and
+the commit goes through.
+
 The hook runs the `gdmerge` already on your `PATH`; it does not build one. If you have run
 `gdmerge git-install` you already have it. Otherwise install it as above first, or the hook will
 report that the executable was not found.
