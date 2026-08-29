@@ -7,6 +7,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `gdmerge check` now validates every `NodePath` in a file: property values, animation track paths
+  inside sub-resources, exported node paths, `%unique` names, the `path:subname` form, connection
+  endpoints and `[editable]` paths. Each is resolved relative to whatever holds it. A path that
+  resolves to nothing is an error; one that reaches into an instanced scene, or uses a unique name
+  the file does not declare while instancing a scene that could supply it, is a warning.
+
+### Changed
+
+- A merge whose result would contain a `NodePath` pointing at nothing is now reported as a conflict
+  naming the stranded path, instead of succeeding. In particular, renaming or reparenting a node on
+  one branch while the other branch leaves a reference to its old path behind used to merge cleanly
+  and produce a scene wired to a node that was not there. Rewriting those references, rather than
+  conflicting, is the next step.
+
+### Fixed
+
+- Merging is deterministic again. Sub-resource resolution iterated a hash set, so which base a path
+  was reported against, and occasionally the merged output itself, could differ between runs.
+
 ## [0.2.1] - 2026-08-29
 
 ### Fixed
