@@ -41,3 +41,13 @@ fn every_fixture_round_trips_byte_for_byte() {
         }
     }
 }
+
+#[test]
+fn no_fixture_differs_from_itself() {
+    for path in fixtures() {
+        let src = std::fs::read_to_string(&path).expect("fixture is UTF-8");
+        let doc = Document::parse(&src).expect("fixture parses");
+        let d = tscn::diff(&doc, &doc);
+        assert!(d.is_empty(), "{}: {:?}", path.display(), d.changes);
+    }
+}

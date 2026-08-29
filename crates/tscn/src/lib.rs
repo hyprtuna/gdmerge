@@ -13,12 +13,14 @@
 //! assert!(doc.is_scene());
 //! ```
 
+mod diff;
 mod doc;
 mod error;
 mod lex;
 mod scene;
 mod value;
 
+pub use diff::{diff, Change, Diff, PropertyChange};
 pub use doc::{Document, Field, Property, Section, SectionKind};
 pub use error::{ParseError, ParseErrorKind};
 pub use scene::{node_path, EntityId, Scene};
