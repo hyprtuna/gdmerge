@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://scene21"]
+
+[node name="Root" type="Node2D"]
+
+[node name="Hero" type="CharacterBody2D" parent="."]
+speed = 100.0
+
+[connection signal="died" from="Hero" to="." method="_on_died"]

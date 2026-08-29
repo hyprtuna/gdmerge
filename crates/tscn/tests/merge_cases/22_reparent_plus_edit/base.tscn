@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://scene22"]
+
+[node name="Root" type="Node2D"]
+
+[node name="Holder" type="Node2D" parent="."]
+
+[node name="Item" type="Sprite2D" parent="."]
+offset = Vector2(1, 1)

@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://scene24"]
+
+[node name="Root" type="Node2D"]
+
+[node name="Box" type="Node2D" parent="."]
+
+[node name="Item" type="Sprite2D" parent="Box"]
+offset = Vector2(1, 1)
+
+[node name="Label" type="Label" parent="Box"]
+text = "hi"
+
+[editable path="Box"]

@@ -13,6 +13,7 @@
 //! assert!(doc.is_scene());
 //! ```
 
+mod align;
 mod check;
 mod diff;
 mod doc;

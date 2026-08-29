@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://scene21"]
+
+[node name="Root" type="Node2D"]
+
+[node name="Player" type="CharacterBody2D" parent="."]
+speed = 250.0
+jump_velocity = -400.0
+
+[connection signal="died" from="Player" to="." method="_on_died"]

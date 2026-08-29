@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://scene23"]
+
+[node name="Root" type="Node2D"]
+
+<<<<<<< ours
+[node name="Player" type="CharacterBody2D" parent="."]
+speed = 100.0
+=======
+[node name="Protagonist" type="CharacterBody2D" parent="."]
+speed = 100.0
+>>>>>>> theirs
