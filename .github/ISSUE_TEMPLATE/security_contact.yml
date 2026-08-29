@@ -1,0 +1,18 @@
+name: Security contact request
+description: Ask for a private channel to report a vulnerability. Put no details here.
+title: "Security contact request"
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Private vulnerability reporting is not enabled on this repository yet, so this
+        issue is how to reach the maintainer without describing the problem in public.
+        Open it as it is; the maintainer will reply with a private channel for the details.
+  - type: checkboxes
+    id: no-details
+    attributes:
+      label: Nothing about the vulnerability is written in this issue
+      options:
+        - label: Confirmed
+          required: true

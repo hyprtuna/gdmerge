@@ -47,8 +47,9 @@ $ install -D -m755 target/release/gdmerge ~/.local/bin/gdmerge
 
 As above, on macOS `mkdir -p ~/.local/bin` first and drop the `-D`.
 
-Requires Rust 1.85 or newer for the tool. The `tscn` library alone builds on 1.74. `cargo test` runs the full suite, including a real `git merge` through
-the installed driver, so `git` needs to be on `PATH`.
+Requires Rust 1.85 or newer for the tool. The `tscn` library alone builds on 1.74. `cargo test`
+runs the full suite, including a real `git merge` through the installed driver, so `git` needs to
+be on `PATH`.
 
 ## 2. Register the merge driver
 
