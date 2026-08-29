@@ -12,8 +12,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Decided first, before anything is built or uploaded, so a release that
+  # must not happen stops here and the log shows what the ones that may
+  # happen are going to do. Refuses a version older than one live on
+  # crates.io and a release with nothing left to do; a half finished release
+  # still completes.
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.needed.outputs.version }}
+      tscn: ${{ steps.needed.outputs.tscn }}
+      gdmerge: ${{ steps.needed.outputs.gdmerge }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Work out what this release has to do
+        id: needed
+        shell: bash
+        run: python3 .github/scripts/publish-plan.py tscn gdmerge
+
   build:
     name: build (${{ matrix.target }})
+    needs: [plan]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -99,9 +124,12 @@ jobs:
             ${{ steps.archive.outputs.name }}.${{ matrix.archive_ext }}.sha256
           if-no-files-found: error
 
+  # The GitHub release is gated on the plan like the crates are. Without
+  # that a refused release still got its binaries and notes published, and
+  # crates.io and GitHub stopped agreeing on what exists.
   publish:
     name: publish
-    needs: [build]
+    needs: [plan, build]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -117,9 +145,12 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
+  # Waits for the approval on the `release` environment. By the time it is
+  # asked for, the plan job has printed what approving means: which crates
+  # get published at which version.
   publish-crates:
     name: publish to crates.io
-    needs: [build]
+    needs: [plan, build]
     runs-on: ubuntu-latest
     # crates.io trusted publishing checks this environment name against the one
     # registered on the crate, so the two have to agree.
@@ -134,13 +165,21 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Refuses a release that would put something older back on top of what is
-      # live, or one that has nothing left to do, rather than uploading it or
-      # passing quietly. A half finished release still completes.
-      - name: Work out what still needs publishing
-        id: needed
+      # An approval can sit for a while. If crates.io changed underneath it,
+      # what was approved is no longer what would happen, so stop.
+      - name: Confirm the approved plan still holds
+        id: again
         shell: bash
         run: python3 .github/scripts/publish-plan.py tscn gdmerge
+
+      - name: Stop if it changed since the approval
+        if: steps.again.outputs.tscn != needs.plan.outputs.tscn || steps.again.outputs.gdmerge != needs.plan.outputs.gdmerge
+        shell: bash
+        run: |
+          echo "the plan changed between the approval and now; nothing was uploaded"
+          echo "approved: tscn=${{ needs.plan.outputs.tscn }} gdmerge=${{ needs.plan.outputs.gdmerge }}"
+          echo "now:      tscn=${{ steps.again.outputs.tscn }} gdmerge=${{ steps.again.outputs.gdmerge }}"
+          exit 1
 
       - name: Exchange the OIDC token for a crates.io token
         uses: rust-lang/crates-io-auth-action@v1
@@ -149,14 +188,14 @@ jobs:
       # tscn first: gdmerge depends on it by version, and cargo waits for the
       # new version to reach the index before returning.
       - name: Publish tscn
-        if: steps.needed.outputs.tscn == 'true'
+        if: needs.plan.outputs.tscn == 'true'
         shell: bash
         run: cargo publish -p tscn --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish gdmerge
-        if: steps.needed.outputs.gdmerge == 'true'
+        if: needs.plan.outputs.gdmerge == 'true'
         shell: bash
         run: cargo publish -p gdmerge --locked
         env:

@@ -73,16 +73,32 @@ jobs:
         shell: bash
         run: cargo +1.85.0 check --workspace --all-targets --locked
 
+  # The release workflow's plan script decides what gets published, so it is
+  # tested like the code is.
+  scripts:
+    name: scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test the release plan
+        shell: bash
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
+  # The one required check. Every needed job has to have succeeded: a job
+  # that was skipped did not pass, and looking only for failures let one
+  # through.
   gate:
     name: gate
-    needs: [build, msrv]
+    needs: [build, msrv, scripts]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check matrix result
+      - name: Every needed job succeeded
         shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
-            echo "One or more build jobs failed or were cancelled."
-            exit 1
-          fi
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
