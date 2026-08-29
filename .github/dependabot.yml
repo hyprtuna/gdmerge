@@ -1,0 +1,11 @@
+# The workflows pin every action to a commit, so updates arrive as pull
+# requests here rather than by a tag moving underneath them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
