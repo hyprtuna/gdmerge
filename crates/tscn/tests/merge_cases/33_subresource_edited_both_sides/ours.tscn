@@ -1,14 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://scene20"]
+[gd_scene load_steps=2 format=3 uid="uid://subedit"]
 
-<<<<<<< ours
 [sub_resource type="Gradient" id="Gradient_1"]
 offsets = PackedFloat32Array(0, 0.5, 1)
 colors = PackedColorArray(0, 0, 0, 1, 1, 1, 1, 1)
-=======
-[sub_resource type="Gradient" id="Gradient_1"]
-offsets = PackedFloat32Array(0, 0.25, 1)
-colors = PackedColorArray(0, 0, 0, 1, 1, 1, 1, 1)
->>>>>>> theirs
 
 [node name="Root" type="Node2D"]
 
