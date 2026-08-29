@@ -36,6 +36,24 @@ pub struct ValueRef {
     pub span: Range<usize>,
 }
 
+/// A `NodePath("...")` occurrence, with the byte range of the quoted path
+/// *including* its quotes, relative to the enclosing raw text.
+///
+/// Recorded the same way resource ids are, so a rename can be applied by
+/// replacing exactly the literal that needs it rather than by matching text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathRef {
+    pub path: String,
+    pub span: Range<usize>,
+}
+
+/// Everything a parsed value points at, gathered as it is read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Pointers {
+    pub refs: Vec<ValueRef>,
+    pub paths: Vec<PathRef>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// `true`, `false`, `null`, `nan`, `inf`, `-inf`, and bare type names.
@@ -240,10 +258,7 @@ fn ref_kind(name: &str) -> Option<RefKind> {
 
 /// Parses one variant literal. `refs` collects every resource reference with an
 /// absolute byte span into the document source.
-pub(crate) fn parse_value(
-    cur: &mut Cursor<'_>,
-    refs: &mut Vec<ValueRef>,
-) -> Result<Value, ParseError> {
+pub(crate) fn parse_value(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Value, ParseError> {
     let tok = cur.next()?;
     parse_value_from(cur, tok, refs)
 }
@@ -251,7 +266,7 @@ pub(crate) fn parse_value(
 pub(crate) fn parse_value_from(
     cur: &mut Cursor<'_>,
     tok: crate::lex::Token,
-    refs: &mut Vec<ValueRef>,
+    refs: &mut Pointers,
 ) -> Result<Value, ParseError> {
     // Every level of nesting funnels through here, so this is the one place the
     // depth has to be counted.
@@ -264,7 +279,7 @@ pub(crate) fn parse_value_from(
 fn parse_value_inner(
     cur: &mut Cursor<'_>,
     tok: crate::lex::Token,
-    refs: &mut Vec<ValueRef>,
+    refs: &mut Pointers,
 ) -> Result<Value, ParseError> {
     match tok.tok {
         Tok::Num(n) => Ok(Value::Num(n)),
@@ -282,7 +297,7 @@ fn parse_value_inner(
 fn parse_after_ident(
     cur: &mut Cursor<'_>,
     name: String,
-    refs: &mut Vec<ValueRef>,
+    refs: &mut Pointers,
 ) -> Result<Value, ParseError> {
     match cur.peek()?.tok {
         Tok::LParen if name == "Object" => parse_object(cur, refs),
@@ -297,7 +312,12 @@ fn parse_after_ident(
             // forms; capture the id token's span so it can be rewritten in place.
             let first = cur.next()?;
             if let (Some(kind), Tok::Str { value, name: false }) = (ref_kind(&name), &first.tok) {
-                refs.push(ValueRef { kind, id: value.clone(), span: first.span.clone() });
+                refs.refs.push(ValueRef { kind, id: value.clone(), span: first.span.clone() });
+            }
+            // Node paths are captured the same way, so a rename can rewrite the
+            // exact literal rather than matching text.
+            if let ("NodePath", Tok::Str { value, name: false }) = (name.as_str(), &first.tok) {
+                refs.paths.push(PathRef { path: value.clone(), span: first.span.clone() });
             }
             args.push(parse_value_from(cur, first, refs)?);
             loop {
@@ -320,10 +340,7 @@ fn parse_after_ident(
     }
 }
 
-fn parse_array_body(
-    cur: &mut Cursor<'_>,
-    refs: &mut Vec<ValueRef>,
-) -> Result<Vec<Value>, ParseError> {
+fn parse_array_body(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Vec<Value>, ParseError> {
     let mut items = Vec::new();
     loop {
         if matches!(cur.peek()?.tok, Tok::RBracket) {
@@ -347,7 +364,7 @@ fn parse_array_body(
 
 fn parse_dict_body(
     cur: &mut Cursor<'_>,
-    refs: &mut Vec<ValueRef>,
+    refs: &mut Pointers,
 ) -> Result<Vec<(Value, Value)>, ParseError> {
     let mut entries = Vec::new();
     loop {
@@ -375,7 +392,7 @@ fn parse_dict_body(
 
 /// Parses the `T` in `Array[T]` / `Dictionary[K, V]`, which is an identifier
 /// that may itself be a resource reference such as `ExtResource("1_a")`.
-fn parse_type_slot(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Value, ParseError> {
+fn parse_type_slot(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Value, ParseError> {
     let tok = cur.next()?;
     let Tok::Ident(name) = tok.tok else {
         return Err(cur.error(
@@ -389,7 +406,7 @@ fn parse_type_slot(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Val
     Ok(Value::Ident(name))
 }
 
-fn parse_typed_array(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Value, ParseError> {
+fn parse_typed_array(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Value, ParseError> {
     cur.expect(&Tok::LBracket, "'['")?;
     let ty = parse_type_slot(cur, refs)?;
     cur.expect(&Tok::RBracket, "']'")?;
@@ -400,7 +417,7 @@ fn parse_typed_array(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<V
     Ok(Value::TypedArray { ty: Box::new(ty), items })
 }
 
-fn parse_typed_dict(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Value, ParseError> {
+fn parse_typed_dict(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Value, ParseError> {
     cur.expect(&Tok::LBracket, "'['")?;
     let key = parse_type_slot(cur, refs)?;
     cur.expect(&Tok::Comma, "','")?;
@@ -413,7 +430,7 @@ fn parse_typed_dict(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Va
     Ok(Value::TypedDict { key: Box::new(key), val: Box::new(val), entries })
 }
 
-fn parse_object(cur: &mut Cursor<'_>, refs: &mut Vec<ValueRef>) -> Result<Value, ParseError> {
+fn parse_object(cur: &mut Cursor<'_>, refs: &mut Pointers) -> Result<Value, ParseError> {
     cur.expect(&Tok::LParen, "'('")?;
     let tok = cur.next()?;
     let Tok::Ident(ty) = tok.tok else {

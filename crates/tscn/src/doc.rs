@@ -1,11 +1,9 @@
 //! The lossless document model: every byte of the source is stored in exactly
 //! one field, so `Document::to_source` reproduces the input verbatim.
 
-use std::fmt::Write as _;
-
 use crate::error::{ParseError, ParseErrorKind};
 use crate::lex::{Cursor, Tok};
-use crate::value::{parse_value, RefKind, Value, ValueRef};
+use crate::value::{parse_value, PathRef, Pointers, RefKind, Value, ValueRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SectionKind {
@@ -75,6 +73,8 @@ pub struct Field {
     pub value_raw: String,
     /// Resource references inside `value_raw`, with spans relative to it.
     pub refs: Vec<ValueRef>,
+    /// Node paths inside `value_raw`, with spans relative to it.
+    pub paths: Vec<PathRef>,
 }
 
 /// A `key = value` assignment following a section header.
@@ -94,6 +94,8 @@ pub struct Property {
     pub value_raw: String,
     /// Resource references inside `value_raw`, with spans relative to it.
     pub refs: Vec<ValueRef>,
+    /// Node paths inside `value_raw`, with spans relative to it.
+    pub paths: Vec<PathRef>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,40 +119,85 @@ pub struct Document {
     pub sections: Vec<Section>,
 }
 
+/// How to rewrite what a value points at while replaying it.
+///
+/// Both kinds of edit are applied by replacing the exact byte range the parser
+/// recorded, so nothing else in the value can be disturbed.
+#[derive(Clone, Copy)]
+pub struct Rewrite<'a> {
+    /// Resource ids, which a merge renumbers.
+    pub ids: &'a dyn Fn(RefKind, &str) -> Option<String>,
+    /// Node paths, which a merge has to follow through renames.
+    pub paths: &'a dyn Fn(&str) -> Option<String>,
+}
+
+impl Rewrite<'_> {
+    /// A rewrite that changes nothing, for plain serialisation.
+    pub fn none() -> Rewrite<'static> {
+        Rewrite { ids: &|_, _| None, paths: &|_| None }
+    }
+}
+
 impl Field {
-    /// The field value with its resource ids rewritten by `remap`.
-    pub fn rendered(&self, remap: &dyn Fn(RefKind, &str) -> Option<String>) -> String {
-        splice_refs(&self.value_raw, &self.refs, remap)
+    /// The field value, rewritten.
+    pub fn rendered(&self, rewrite: Rewrite<'_>) -> String {
+        splice(&self.value_raw, &self.refs, &self.paths, rewrite)
     }
 }
 
 impl Property {
-    /// The property value with its resource ids rewritten by `remap`.
-    pub fn rendered(&self, remap: &dyn Fn(RefKind, &str) -> Option<String>) -> String {
-        splice_refs(&self.value_raw, &self.refs, remap)
+    /// The property value, rewritten.
+    pub fn rendered(&self, rewrite: Rewrite<'_>) -> String {
+        splice(&self.value_raw, &self.refs, &self.paths, rewrite)
     }
 }
 
-fn splice_refs(
-    raw: &str,
-    refs: &[ValueRef],
-    remap: &dyn Fn(RefKind, &str) -> Option<String>,
-) -> String {
-    if refs.is_empty() {
+fn splice(raw: &str, refs: &[ValueRef], paths: &[PathRef], rewrite: Rewrite<'_>) -> String {
+    let mut edits: Vec<(std::ops::Range<usize>, String)> = Vec::new();
+    for r in refs {
+        if let Some(new_id) = (rewrite.ids)(r.kind, &r.id) {
+            if new_id != r.id {
+                edits.push((r.span.clone(), format!("\"{new_id}\"")));
+            }
+        }
+    }
+    for p in paths {
+        if let Some(new_path) = (rewrite.paths)(&p.path) {
+            if new_path != p.path {
+                edits.push((p.span.clone(), quote(&new_path)));
+            }
+        }
+    }
+    if edits.is_empty() {
         return raw.to_string();
     }
+    edits.sort_by_key(|(span, _)| span.start);
     let mut out = String::with_capacity(raw.len());
     let mut cursor = 0usize;
-    for r in refs {
-        let Some(new_id) = remap(r.kind, &r.id) else { continue };
-        if new_id == r.id {
-            continue;
+    for (span, replacement) in edits {
+        if span.start < cursor {
+            continue; // Overlapping edits cannot both apply; keep the first.
         }
-        out.push_str(&raw[cursor..r.span.start]);
-        let _ = write!(out, "\"{new_id}\"");
-        cursor = r.span.end;
+        out.push_str(&raw[cursor..span.start]);
+        out.push_str(&replacement);
+        cursor = span.end;
     }
     out.push_str(&raw[cursor..]);
+    out
+}
+
+/// Quotes a string the way Godot's writer does.
+pub(crate) fn quote(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
     out
 }
 
@@ -175,8 +222,8 @@ impl Section {
             .chain(self.props.iter().flat_map(|p| p.refs.iter()))
     }
 
-    /// Renders the section back to source, rewriting resource ids via `remap`.
-    pub fn render(&self, remap: &dyn Fn(RefKind, &str) -> Option<String>, out: &mut String) {
+    /// Renders the section back to source with the given rewrite applied.
+    pub fn render(&self, rewrite: Rewrite<'_>, out: &mut String) {
         out.push('[');
         out.push_str(&self.open_sep);
         out.push_str(&self.tag);
@@ -186,7 +233,7 @@ impl Section {
             out.push_str(&f.sep_eq);
             out.push('=');
             out.push_str(&f.sep_val);
-            out.push_str(&f.rendered(remap));
+            out.push_str(&f.rendered(rewrite));
         }
         out.push_str(&self.close_sep);
         out.push(']');
@@ -196,7 +243,7 @@ impl Section {
             out.push_str(&p.sep_eq);
             out.push('=');
             out.push_str(&p.sep_val);
-            out.push_str(&p.rendered(remap));
+            out.push_str(&p.rendered(rewrite));
         }
         out.push_str(&self.trailing);
     }
@@ -209,14 +256,14 @@ impl Document {
 
     /// Reproduces the source text. For an unmodified document this is byte-exact.
     pub fn to_source(&self) -> String {
-        self.render(&|_, _| None)
+        self.render(Rewrite::none())
     }
 
-    pub fn render(&self, remap: &dyn Fn(RefKind, &str) -> Option<String>) -> String {
+    pub fn render(&self, rewrite: Rewrite<'_>) -> String {
         let mut out = String::new();
         out.push_str(&self.lead);
         for s in &self.sections {
-            s.render(remap, &mut out);
+            s.render(rewrite, &mut out);
         }
         out
     }
@@ -351,12 +398,21 @@ fn parse_section(cur: &mut Cursor<'_>) -> Result<Section, ParseError> {
                 let sep_eq = src[tok.span.end..eq.span.start].to_string();
                 let value_start = cur.next_start()?;
                 let sep_val = src[eq.span.end..value_start].to_string();
-                let mut refs = Vec::new();
+                let mut refs = Pointers::default();
                 let value = parse_value(cur, &mut refs)?;
                 cur.reset_to_end();
                 let value_raw = src[value_start..cur.end()].to_string();
-                rebase_refs(&mut refs, value_start);
-                fields.push(Field { sep_before, name, sep_eq, sep_val, value, value_raw, refs });
+                rebase(&mut refs, value_start);
+                fields.push(Field {
+                    sep_before,
+                    name,
+                    sep_eq,
+                    sep_val,
+                    value,
+                    value_raw,
+                    refs: refs.refs,
+                    paths: refs.paths,
+                });
             }
             other => {
                 return Err(cur.error(
@@ -419,17 +475,31 @@ fn parse_property(cur: &mut Cursor<'_>) -> Result<Property, ParseError> {
     cur.seek(eq + 1);
     let value_start = cur.next_start()?;
     let sep_val = src[eq + 1..value_start].to_string();
-    let mut refs = Vec::new();
+    let mut refs = Pointers::default();
     let value = parse_value(cur, &mut refs)?;
     cur.reset_to_end();
     let value_raw = src[value_start..cur.end()].to_string();
-    rebase_refs(&mut refs, value_start);
+    rebase(&mut refs, value_start);
 
-    Ok(Property { lead: String::new(), key_raw, key, sep_eq, sep_val, value, value_raw, refs })
+    Ok(Property {
+        lead: String::new(),
+        key_raw,
+        key,
+        sep_eq,
+        sep_val,
+        value,
+        value_raw,
+        refs: refs.refs,
+        paths: refs.paths,
+    })
 }
 
-fn rebase_refs(refs: &mut [ValueRef], base: usize) {
-    for r in refs {
+/// Moves spans from document coordinates into the value's own.
+fn rebase(pointers: &mut Pointers, base: usize) {
+    for r in &mut pointers.refs {
         r.span = (r.span.start - base)..(r.span.end - base);
+    }
+    for p in &mut pointers.paths {
+        p.span = (p.span.start - base)..(p.span.end - base);
     }
 }

@@ -41,14 +41,17 @@ pub fn tokenize(src: &str) {
 /// Parses one variant literal from `src`.
 pub fn parse_value(src: &str) {
     let mut cursor = Cursor::new(src);
-    let mut refs = Vec::new();
+    let mut refs = crate::value::Pointers::default();
     if let Ok(value) = crate::value::parse_value(&mut cursor, &mut refs) {
         // Canonicalising must be total: it is used to compare every value in
         // every merge, so a value that parses but cannot be canonicalised would
         // take down a merge rather than a parse.
         let _ = value.canonical(&mut |_, id| id.to_string());
-        for r in &refs {
+        for r in &refs.refs {
             assert!(r.span.end <= src.len(), "reference span outside the input");
+        }
+        for p in &refs.paths {
+            assert!(p.span.end <= src.len(), "node path span outside the input");
         }
     }
 }
