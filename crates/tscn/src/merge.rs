@@ -16,6 +16,7 @@ use std::fmt::Write as _;
 use crate::align::{Alignment, Which};
 use crate::diff::diff_scenes;
 use crate::doc::{Document, Section, SectionKind};
+use crate::nodepath::{findings, Resolution};
 use crate::scene::{node_path, EntityId, Scene};
 use crate::value::RefKind;
 
@@ -249,11 +250,95 @@ pub fn merge(
         plan.insert(id.clone(), res);
     }
 
-    let order = merged_order(&vo, &vt, &plan);
-    let final_ids = assign_ids(&order, &vo, &vt);
-    let text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
+    let mut order = merged_order(&vo, &vt, &plan);
+    let mut final_ids = assign_ids(&order, &vo, &vt);
+    let mut text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
+
+    // A merge that leaves the file pointing at a node that is no longer there
+    // loads without complaint and does nothing, which is worse than a conflict.
+    // So it becomes one, and the file is emitted again with that entity marked.
+    if conflicts.is_empty() {
+        let stale = stale_references(&text, &align, &vo, &vt, &mut plan);
+        if !stale.is_empty() {
+            conflicts.extend(stale);
+            order = merged_order(&vo, &vt, &plan);
+            final_ids = assign_ids(&order, &vo, &vt);
+            text = emit(ours, &order, &plan, &vo, &vt, &final_ids, &align, opts);
+        }
+    }
+
     conflicts.sort_by(|a, b| a.entity.cmp(&b.entity));
     MergeOutcome { text, conflicts }
+}
+
+/// Finds NodePaths in the merged file that name nothing, and turns each into a
+/// conflict on whatever is responsible.
+///
+/// A path left behind by a rename is blamed on the rename, which is the change
+/// that broke it and the one with two sides to choose between. Anything else is
+/// reported without markers: there is no choice to offer, only a file that
+/// needs a path fixed by hand.
+fn stale_references(
+    text: &str,
+    align: &Alignment,
+    vo: &View<'_>,
+    vt: &View<'_>,
+    plan: &mut HashMap<EntityId, Res>,
+) -> Vec<Conflict> {
+    let Ok(doc) = Document::parse(text) else { return Vec::new() };
+    let renames: HashMap<String, String> = align.renames().into_iter().collect();
+    let mut conflicts = Vec::new();
+    let mut blamed: HashSet<EntityId> = HashSet::new();
+
+    for (reference, outcome) in findings(&doc) {
+        let target = match outcome {
+            Resolution::Missing(target) => target,
+            // A unique name with nowhere to come from is just as broken, and a
+            // rename is the usual reason it stopped resolving.
+            Resolution::UnknownUniqueName { name, supplied_elsewhere: false } => name,
+            _ => continue,
+        };
+        let detail = format!(
+            "NodePath(\"{}\") in {} still points at \"{}\"",
+            reference.path,
+            reference.site.describe(),
+            target
+        );
+        // Did a branch rename this very node out from under the reference?
+        match renames.get(&target) {
+            Some(now) => {
+                let id = EntityId::Node(now.clone());
+                if !blamed.insert(id.clone()) {
+                    continue;
+                }
+                // Only a node both branches still have can be shown as two
+                // sides; otherwise fall through to the plain report.
+                if vo.section(&id).is_some() && vt.section(&id).is_some() {
+                    plan.insert(id.clone(), Res::Conflict);
+                    conflicts.push(Conflict {
+                        entity: vo.describe(&id),
+                        detail: format!("renamed to \"{now}\", but {detail}"),
+                        key: Some("name".to_string()),
+                        rows: Vec::new(),
+                    });
+                    continue;
+                }
+                conflicts.push(Conflict {
+                    entity: format!("node {now}"),
+                    detail,
+                    key: None,
+                    rows: Vec::new(),
+                });
+            }
+            None => conflicts.push(Conflict {
+                entity: reference.site.describe(),
+                detail,
+                key: None,
+                rows: Vec::new(),
+            }),
+        }
+    }
+    conflicts
 }
 
 /// Wording for a collision, naming the rename case explicitly because the bare

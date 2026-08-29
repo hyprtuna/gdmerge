@@ -205,3 +205,43 @@ fn crlf_documents_stay_crlf() {
         assert_eq!(outcome.text, expected, "{}: CRLF merge differs from the LF merge", case.name);
     }
 }
+
+/// Merging the same three files twice has to give the same answer.
+///
+/// Several stages key entities by hash, and Rust seeds each map differently, so
+/// anything that iterates one and keeps the first result can silently depend on
+/// that seed. A merge tool that is not deterministic is not trustworthy.
+#[test]
+fn merging_is_deterministic() {
+    for case in cases() {
+        let base_src = read(&case.dir.join(format!("base.{}", case.ext)));
+        let ours_src = read(&case.dir.join(format!("ours.{}", case.ext)));
+        let theirs_src = read(&case.dir.join(format!("theirs.{}", case.ext)));
+
+        let mut first: Option<(String, Vec<String>)> = None;
+        for attempt in 0..24 {
+            // Parsed afresh each time so every run builds new hash maps.
+            let base = Document::parse(&base_src).unwrap();
+            let ours = Document::parse(&ours_src).unwrap();
+            let theirs = Document::parse(&theirs_src).unwrap();
+            let outcome = tscn::merge(&base, &ours, &theirs, &MergeOptions::default());
+            let conflicts: Vec<String> =
+                outcome.conflicts.iter().map(|c| format!("{}: {}", c.entity, c.detail)).collect();
+            match &first {
+                None => first = Some((outcome.text, conflicts)),
+                Some((text, expected)) => {
+                    assert_eq!(
+                        &outcome.text, text,
+                        "{}: attempt {attempt} produced different output",
+                        case.name
+                    );
+                    assert_eq!(
+                        &conflicts, expected,
+                        "{}: attempt {attempt} produced different conflicts",
+                        case.name
+                    );
+                }
+            }
+        }
+    }
+}

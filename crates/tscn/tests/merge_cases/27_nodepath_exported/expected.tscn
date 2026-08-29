@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://npexport"]
+
+[node name="Level" type="Node2D" node_paths=PackedStringArray("target")]
+target = NodePath("Hero")
+
+<<<<<<< ours
+[node name="Player" type="CharacterBody2D" parent="."]
+speed = 100.0
+=======
+[node name="Hero" type="CharacterBody2D" parent="."]
+speed = 250.0
+>>>>>>> theirs

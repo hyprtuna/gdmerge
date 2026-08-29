@@ -151,6 +151,16 @@ impl Alignment {
         }
     }
 
+    /// Nodes whose path changed, as the base path they had against the path the
+    /// merged file gives them.
+    pub(crate) fn renames(&self) -> Vec<(String, String)> {
+        self.paths[&Which::Base]
+            .iter()
+            .filter(|(before, after)| before != after)
+            .map(|(before, after)| (before.clone(), after.clone()))
+            .collect()
+    }
+
     pub(crate) fn is_contested(&self, base_path: &str) -> bool {
         self.contested.contains(base_path)
     }
