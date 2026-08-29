@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 
 use tscn::{Conflict, ConflictRow};
 
-/// Longest value shown in a column before it is shortened.
+/// Longest value shown in a table column before it is shortened.
 const MAX_CELL: usize = 34;
 
 /// The full side-by-side table, for a terminal.
@@ -36,7 +36,8 @@ pub fn table(conflicts: &[Conflict]) -> String {
 }
 
 /// A compact rendering for the merge driver, which writes to standard error
-/// while git is running and should stay quiet about what already agrees.
+/// while git is running and should stay quiet about what already agrees. The
+/// values it does show are shown whole, so an id can be read and copied.
 pub fn plain(conflicts: &[Conflict]) -> String {
     let mut out = String::new();
     for c in conflicts {
@@ -46,8 +47,8 @@ pub fn plain(conflicts: &[Conflict]) -> String {
                 out,
                 "gdmerge:   {}: ours {} / theirs {}",
                 row.key,
-                cell(&row.ours),
-                cell(&row.theirs)
+                flat(&row.ours),
+                flat(&row.theirs)
             );
         }
     }
@@ -95,16 +96,41 @@ fn render_rows(out: &mut String, rows: &[ConflictRow]) {
     }
 }
 
-/// Renders one value for a table cell. Scene values run to thousands of
-/// characters, so anything long is cut with an ellipsis; absence is explicit,
-/// because "the node is not on this side" is the whole story of a delete
-/// against a modify.
-fn cell(value: &Option<String>) -> String {
+/// One value on one line: the source text with its whitespace runs collapsed.
+/// Absence is explicit, because "the node is not on this side" is the whole
+/// story of a delete against a modify.
+fn flat(value: &Option<String>) -> String {
     let Some(value) = value else { return "(absent)".to_string() };
-    let flat = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if flat.chars().count() <= MAX_CELL {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Renders one value for a table cell. Scene values run to thousands of
+/// characters, so a long one is cut with an ellipsis, but never inside a quoted
+/// string: an id such as `SubResource("RectangleShape2D_gdm0")` has to come
+/// out whole, so the cut waits for the closing quote, and a value that is a
+/// few characters longer than the cut is simply shown.
+fn cell(value: &Option<String>) -> String {
+    let flat = flat(value);
+    let chars: Vec<char> = flat.chars().collect();
+    if chars.len() <= MAX_CELL {
         return flat;
     }
-    let head: String = flat.chars().take(MAX_CELL - 3).collect();
-    format!("{head}...")
+    let (mut inside, mut escaped) = (false, false);
+    for (i, &c) in chars.iter().enumerate() {
+        if i >= MAX_CELL - 3 && !inside {
+            if chars.len() - i <= 3 {
+                return flat;
+            }
+            let head: String = chars[..i].iter().collect();
+            return format!("{head}...");
+        }
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && inside {
+            escaped = true;
+        } else if c == '"' {
+            inside = !inside;
+        }
+    }
+    flat
 }

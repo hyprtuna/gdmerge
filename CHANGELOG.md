@@ -18,6 +18,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Conflict reports show ids whole. The stderr lines and the `gdmerge mergetool` table cut every
+  value at 34 characters, which took the end off a renumbered id such as
+  `SubResource("RectangleShape2D_gdm0")`, so the id 0.3.3 said the report names could neither be
+  read nor copied. The stderr lines now print the differing values whole, and the table still
+  shortens a long value but never inside a quoted string.
 - `gdmerge check` reads every number the way Godot's loader does. 0.3.3 fixed the quoted `index`
   spelling and left the rest of the class alone: `load_steps="99"` escaped the staleness warning,
   and two siblings with `index="abc"` were accepted although Godot's `String::to_int` reads both as
