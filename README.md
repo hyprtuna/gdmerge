@@ -242,7 +242,7 @@ $ gdmerge check --json broken.tscn
 ```yaml
 repos:
   - repo: https://github.com/hyprtuna/gdmerge
-    rev: v0.3.4
+    rev: v0.3.5
     hooks:
       - id: gdmerge-check
 ```

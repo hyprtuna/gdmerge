@@ -11,15 +11,15 @@ published beside it, extract it, and put `gdmerge` somewhere on your `PATH`. Eve
 
 | Platform | Archive |
 | --- | --- |
-| Linux, x86-64 | `gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz` |
-| macOS, Apple silicon | `gdmerge-v0.3.4-aarch64-apple-darwin.tar.gz` |
-| macOS, Intel | `gdmerge-v0.3.4-x86_64-apple-darwin.tar.gz` |
-| Windows, x86-64 | `gdmerge-v0.3.4-x86_64-pc-windows-msvc.zip` |
+| Linux, x86-64 | `gdmerge-v0.3.5-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS, Apple silicon | `gdmerge-v0.3.5-aarch64-apple-darwin.tar.gz` |
+| macOS, Intel | `gdmerge-v0.3.5-x86_64-apple-darwin.tar.gz` |
+| Windows, x86-64 | `gdmerge-v0.3.5-x86_64-pc-windows-msvc.zip` |
 
 ```console
-$ sha256sum -c gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz.sha256
-gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz: OK
-$ tar xzf gdmerge-v0.3.4-x86_64-unknown-linux-gnu.tar.gz
+$ sha256sum -c gdmerge-v0.3.5-x86_64-unknown-linux-gnu.tar.gz.sha256
+gdmerge-v0.3.5-x86_64-unknown-linux-gnu.tar.gz: OK
+$ tar xzf gdmerge-v0.3.5-x86_64-unknown-linux-gnu.tar.gz
 $ install -D -m755 gdmerge ~/.local/bin/gdmerge
 ```
 
@@ -150,7 +150,7 @@ If you use [pre-commit](https://pre-commit.com), add this to your project's
 ```yaml
 repos:
   - repo: https://github.com/hyprtuna/gdmerge
-    rev: v0.3.4
+    rev: v0.3.5
     hooks:
       - id: gdmerge-check
 ```
