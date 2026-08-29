@@ -117,6 +117,30 @@ The grammar follows Godot's own `core/variant/variant_parser.cpp` and
 `scene/resources/resource_format_text.cpp` on the 4.x branch. When something about the file format
 is in question, those files are the authority; please do not guess, and cite what you found.
 
+## Releasing
+
+Only the repository owner cuts releases, but it is worth knowing what happens.
+
+1. Bump the workspace version in the root `Cargo.toml`, run a build so `Cargo.lock` follows,
+   and move the `Unreleased` entries in `CHANGELOG.md` under the new version.
+2. Merge that through a pull request like anything else.
+3. Push a `v<version>` tag. Nothing publishes on merge; the tag is what starts a release.
+4. The workflow builds the binaries and creates the GitHub release, then waits. Publishing to
+   crates.io needs an approval on the `release` environment, and uses trusted publishing, so
+   there is no registry token anywhere.
+
+`.github/scripts/publish-plan.py` decides what is left to publish and refuses two things
+outright: a version older than one already on crates.io, and a release where every crate is
+already at that version. Both mean an old or finished release is being replayed, so they fail
+loudly instead of uploading something wrong or passing quietly. A release that got half way,
+where one crate published and the next did not, still completes.
+
+You can run that check yourself from a clean tree:
+
+```console
+$ python3 .github/scripts/publish-plan.py tscn gdmerge
+```
+
 ## Commits and pull requests
 
 - [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`,
