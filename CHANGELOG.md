@@ -29,6 +29,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `%P` for exactly this; the driver has been given it since 0.3.1 and never read it. The message
   now reads `falling back to a text merge (scenes/level.tscn, base version: ...)`, which makes
   INSTALL's "the message names the file and the reason" true on the driver path as well.
+- `gdmerge git-uninstall` gives the attributes file back byte for byte. It rewrote what it kept
+  through a line splitter, so CRLF endings became LF and a file whose last line had no newline
+  gained one. It now removes only the lines `git-install` wrote, the blank line before them, and
+  the newline `git-install` had to add to the previous last line, which the marker line records.
+  And a file named by a `core.attributesfile` of your own is never deleted, however empty it is
+  left, since the entry naming it is yours; 0.3.4 deleted such a file and left the entry pointing
+  at nothing.
 
 ## [0.3.4] - 2026-08-29
 

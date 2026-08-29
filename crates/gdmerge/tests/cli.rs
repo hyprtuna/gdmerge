@@ -796,6 +796,69 @@ fn git_uninstall_global_keeps_an_attributes_file_with_other_rules() {
     assert!(stdout(&out).contains("core.attributesfile still names it"), "{}", stdout(&out));
 }
 
+/// Uninstalling gives back the attributes file byte for byte, whatever its line
+/// endings and whether or not its last line ended with a newline.
+#[test]
+fn git_uninstall_preserves_the_bytes_it_does_not_remove() {
+    for (name, original) in [
+        ("no-final-newline", "*.png binary"),
+        ("crlf", "*.png binary\r\n*.jpg binary\r\n"),
+        ("mixed", "*.png binary\r\n\n*.jpg binary"),
+    ] {
+        let s = Scratch::new(&format!("uninstall-bytes-{name}"));
+        let dir = s.path();
+        assert!(git(dir, &["init", "-q", "-b", "main"]).status.success());
+        let attributes = dir.join(".gitattributes");
+        std::fs::write(&attributes, original).unwrap();
+
+        let out = Command::new(BIN).current_dir(dir).arg("git-install").output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let installed = std::fs::read(&attributes).unwrap();
+        assert!(installed.starts_with(original.as_bytes()), "{name}");
+        assert!(installed.len() > original.len(), "{name}");
+
+        let out = Command::new(BIN).current_dir(dir).arg("git-uninstall").output().unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let restored = std::fs::read(&attributes).unwrap();
+        assert_eq!(
+            restored,
+            original.as_bytes(),
+            "{name}: {:?}",
+            String::from_utf8_lossy(&restored)
+        );
+    }
+}
+
+/// A `core.attributesfile` of the user's own is theirs, and so is the file it
+/// names, even one `git-install --global` had to create: only gdmerge's lines
+/// go, and the output says what stays.
+#[test]
+fn git_uninstall_global_never_deletes_a_file_of_your_own() {
+    let s = Scratch::new("global-uninstall-custom");
+    let home = s.path();
+    let mine = home.join("mine.attrs");
+    let set = Command::new("git")
+        .args(["config", "--global", "core.attributesfile"])
+        .arg(&mine)
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env_remove("GIT_CONFIG_GLOBAL")
+        .output()
+        .unwrap();
+    assert!(set.status.success());
+
+    let out = gdmerge_as_user(home, &["git-install", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(std::fs::read_to_string(&mine).unwrap().contains("*.tscn merge=gdmerge"));
+
+    let out = gdmerge_as_user(home, &["git-uninstall", "--global"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(std::fs::read_to_string(&mine).unwrap(), "", "the file stays, emptied");
+    assert_eq!(global_config(home, "core.attributesfile").as_deref(), Some(mine.to_str().unwrap()));
+    assert!(stdout(&out).contains("left the file in place, empty"), "{}", stdout(&out));
+}
+
 /// A conflict the driver cannot resolve, handed to `git mergetool --tool=gdmerge`.
 #[test]
 fn git_mergetool_explains_a_real_conflict() {
