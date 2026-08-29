@@ -38,6 +38,26 @@ exact source text plus the byte ranges of the resource ids inside it, so seriali
 document reproduces the input exactly, and rewriting an id is a splice rather than a re-render. The
 parsed value tree is used for *comparison only*, never for output.
 
+## Fuzzing
+
+`fuzz/` holds three libFuzzer targets: `lex` for the tokenizer, `value` for the variant
+parser, and `document` for a whole file plus the byte-exact round trip. It is a separate
+workspace, excluded from the root one, because it needs nightly and a sanitizer.
+
+```console
+$ cargo install cargo-fuzz
+$ mkdir -p fuzz/corpus/document
+$ cargo +nightly fuzz run document fuzz/corpus/document fuzz/seeds/document \
+    crates/tscn/tests/fixtures -- -max_total_time=300
+```
+
+`fuzz/seeds/` is committed and small. `fuzz/corpus/` is what the fuzzer grows and is not
+tracked; the real scene fixtures are passed as an extra read-only corpus instead of being
+copied. A weekly workflow runs each target for ten minutes and uploads anything it finds.
+
+If a run stops on a crash, minimise it with `cargo +nightly fuzz tmin <target> <artifact>`,
+turn it into a test in `crates/tscn/tests/grammar.rs`, then fix it.
+
 ## The README's demos
 
 `docs/demo.svg` and `docs/conflict.svg` are rendered from real runs, not drawn by hand. If you
