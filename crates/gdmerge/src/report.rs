@@ -12,14 +12,18 @@ use tscn::{Conflict, ConflictRow};
 use crate::show::shown;
 
 /// The full side-by-side table, for a terminal.
+///
+/// Names go through [`shown`] like values: a node name or a property key is
+/// text a scene file may make as long as it likes, and a report that printed
+/// one whole would be unbounded through its identities instead of its values.
 pub fn table(conflicts: &[Conflict]) -> String {
     let mut out = String::new();
     for (i, c) in conflicts.iter().enumerate() {
         if i > 0 {
             out.push('\n');
         }
-        let _ = writeln!(out, "Conflict {} of {}: {}", i + 1, conflicts.len(), c.entity);
-        let _ = writeln!(out, "  {}", c.detail);
+        let _ = writeln!(out, "Conflict {} of {}: {}", i + 1, conflicts.len(), shown(&c.entity));
+        let _ = writeln!(out, "  {}", shown(&c.detail));
         out.push('\n');
         render_rows(&mut out, &c.rows);
     }
@@ -39,12 +43,12 @@ pub fn table(conflicts: &[Conflict]) -> String {
 pub fn plain(conflicts: &[Conflict]) -> String {
     let mut out = String::new();
     for c in conflicts {
-        let _ = writeln!(out, "gdmerge: conflict in {} ({})", c.entity, c.detail);
+        let _ = writeln!(out, "gdmerge: conflict in {} ({})", shown(&c.entity), shown(&c.detail));
         for row in c.rows.iter().filter(|r| r.differs) {
             let _ = writeln!(
                 out,
                 "gdmerge:   {}: ours {} / theirs {}",
-                row.key,
+                shown(&row.key),
                 cell(&row.ours),
                 cell(&row.theirs)
             );
@@ -61,7 +65,7 @@ fn render_rows(out: &mut String, rows: &[ConflictRow]) {
         .map(|r| {
             [
                 if r.differs { ">".to_string() } else { String::new() },
-                r.key.clone(),
+                shown(&r.key),
                 cell(&r.base),
                 cell(&r.ours),
                 cell(&r.theirs),

@@ -30,21 +30,21 @@ pub fn run(before: &Path, after: &Path, json: bool) -> Result<i32> {
     for change in &d.changes {
         println!();
         match change {
-            Change::Added { entity, .. } => println!("  + {entity}"),
-            Change::Removed { entity, .. } => println!("  - {entity}"),
-            Change::Moved { from, to, .. } => println!("  > {from} -> {to}"),
+            Change::Added { entity, .. } => println!("  + {}", shown(entity)),
+            Change::Removed { entity, .. } => println!("  - {}", shown(entity)),
+            Change::Moved { from, to, .. } => println!("  > {} -> {}", shown(from), shown(to)),
             Change::Reordered { entity, from, to, .. } => {
-                println!("  ~ {entity} moved from position {from} to {to}");
+                println!("  ~ {} moved from position {from} to {to}", shown(entity));
             }
             Change::Modified { entity, fields, properties, .. } => {
-                println!("  ~ {entity}");
+                println!("  ~ {}", shown(entity));
                 for c in fields.iter().chain(properties) {
                     match (&c.before, &c.after) {
                         (Some(b), Some(a)) => {
-                            println!("      {}: {} -> {}", c.key, shown(b), shown(a))
+                            println!("      {}: {} -> {}", shown(&c.key), shown(b), shown(a))
                         }
-                        (None, Some(a)) => println!("      + {}: {}", c.key, shown(a)),
-                        (Some(b), None) => println!("      - {}: {}", c.key, shown(b)),
+                        (None, Some(a)) => println!("      + {}: {}", shown(&c.key), shown(a)),
+                        (Some(b), None) => println!("      - {}: {}", shown(&c.key), shown(b)),
                         (None, None) => {}
                     }
                 }
