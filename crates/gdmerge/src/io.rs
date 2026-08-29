@@ -36,9 +36,8 @@ pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
         return Err(e).with_context(|| format!("writing {}", tmp.display()));
     }
     std::fs::rename(&tmp, path)
-        .map_err(|e| {
+        .inspect_err(|_| {
             let _ = std::fs::remove_file(&tmp);
-            e
         })
         .with_context(|| format!("replacing {}", path.display()))
 }
