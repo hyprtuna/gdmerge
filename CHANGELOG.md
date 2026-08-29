@@ -7,12 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-29
+
 ### Fixed
 
 - A file that nests values thousands of levels deep no longer overflows the stack and aborts the
   process. Nesting is parsed recursively and had no limit; values may now nest 128 levels, which is
   far more than a real scene uses and more than Godot's own writer will emit, and anything deeper is
-  a parse error like any other malformed input. Found by fuzzing.
+  a parse error like any other malformed input. Found by fuzzing. This matters because gdmerge reads
+  files that arrive from forks and pull requests.
 
 ### Added
 
@@ -83,6 +86,7 @@ First release.
   behind.
 - A branch that made no semantic change never has its bytes rewritten by the other branch.
 
-[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hyprtuna/gdmerge/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hyprtuna/gdmerge/releases/tag/v0.1.0
